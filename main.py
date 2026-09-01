@@ -4,8 +4,16 @@ import json
 import time
 import random
 import sqlite3
-import requests
+import unicodedata
+from difflib import SequenceMatcher
 from datetime import datetime
+import requests
+from response_bank_100k import RESPONSES
+
+# ============================================================
+# Telegram Business Shop Bot v9
+# Conversational Persian sales assistant
+# ============================================================
 
 TOKEN = os.environ["BOT_TOKEN"].strip()
 ADMIN_ID = int(os.environ["ADMIN_ID"]) if os.environ.get("ADMIN_ID") else 0
@@ -15,86 +23,680 @@ DB_PATH = os.environ.get("DB_PATH", "shop.db")
 PRICE_MIN = 799_000
 PRICE_MAX = 2_000_000
 SHIPPING_FEE = 112_000
+MAX_ITEMS_PER_ORDER = 50
 
-GREETINGS = [
-    "سلام 👋 خوش اومدی 🌹 بگو دنبال چه لباسی هستی تا راهنماییت کنم.",
-    "سلام عزیز 👋 خوش اومدی. اسم یا عکس محصول رو بفرست تا باهم بررسیش کنیم.",
-    "سلام 🌹 در خدمتم. محصول، سایز یا قیمت هرچی خواستی بپرس."
+# ------------------------------------------------------------
+# Response banks
+# Responses are assembled from several independent banks.
+# This creates a very large number of natural combinations
+# without hard-coding 100,000 near-identical sentences.
+# ------------------------------------------------------------
+
+FRIENDLY_OPENERS = [
+    "حتماً عزیز 🌹",
+    "آره حتماً 👌",
+    "چشم رفیق 🤝",
+    "حتماً، بریم جلو 👌",
+    "اوکی عزیز 🌹",
+    "آره، متوجه‌ام 👌",
+    "قربونت، حتماً 🌹",
+    "باشه، الان میگم 👌",
+    "حتماً داداش 😄",
+    "روی چشم 🌹",
+    "آره عزیز،",
+    "چشم،",
 ]
 
-PRICE_INTROS = [
-    "برای این مدل، قیمت حدودی فعلی",
-    "حدود قیمت این کار الان",
-    "قیمت تقریبی این مدل در حال حاضر"
+SOFT_CLOSERS = [
+    "هرچی دیگه خواستی بپرس 🌹",
+    "اگه چیزی مبهمه بگو تا واضح‌تر بگم.",
+    "من هستم، هر سوالی داری بپرس 👌",
+    "اگر خواستی بیشتر راهنماییت می‌کنم.",
+    "هرجا گیر کردی بگو باهم جلو می‌ریم.",
+    "نگران نباش، مرحله‌به‌مرحله باهم می‌ریم جلو 🌹",
+    "",
+]
+
+GREETINGS = [
+    "سلام عزیز 👋 خوش اومدی 🌹 اسم یا عکس محصولی که مدنظرت هست رو بفرست.",
+    "سلام رفیق 👋 خوش اومدی. قیمت، سایز، ارسال یا ثبت سفارش؛ هرچی خواستی بپرس.",
+    "سلام 🌹 در خدمتم. محصول رو بفرست تا راهنماییت کنم.",
+    "سلام داداش 👋 خوش اومدی. بگو دنبال چی هستی تا سریع راهنماییت کنم.",
+    "سلام عزیزم 🌹 عکس یا اسم کار رو بفرست، بریم ببینیم چی به دردت می‌خوره.",
+]
+
+UNKNOWN_REPLIES = [
+    "منظورت رو کامل نگرفتم 😅 یه مدل دیگه بگو تا دقیق جواب بدم.",
+    "یکم واضح‌تر می‌گی عزیز؟ می‌خوام درست متوجه منظورت بشم 🌹",
+    "این یکی رو دقیق نگرفتم؛ کوتاه‌تر یا با یه عبارت دیگه بگو 👌",
+    "فکر کنم منظورت رو اشتباه گرفتم 😄 دوباره یه جور دیگه بگو.",
+    "یه بار دیگه با کلمات ساده‌تر بگو رفیق، دقیق جواب می‌دم.",
+    "این جمله برام دوپهلو بود؛ منظورت رو یه کم بازتر بگو 🌹",
+    "متوجه نشدم دقیقاً کدوم بخش رو می‌پرسی. یه جور دیگه بگو 👌",
+    "پیامت رو گرفتم ولی منظورت رو نه 😅 یه بار دیگه بگو.",
+]
+
+WAIT_REPLIES = [
+    "باشه عزیز، عجله‌ای نیست 😄 هر وقت آماده بودی ادامه می‌دیم.",
+    "چشم، منتظرم 👌 هر وقت آماده شدی پیام بده.",
+    "باشه رفیق 🌹 من هستم، با خیال راحت.",
+    "اوکی، عجله نکن. هر وقت آماده بودی از همین‌جا ادامه می‌دیم.",
+]
+
+DONT_KNOW_GENERIC = [
+    "اشکالی نداره 😄 بگو دقیقاً کدوم قسمتش رو نمی‌دونی تا همون رو برات ساده کنم.",
+    "اوکی، من راهنماییت می‌کنم 👌 فقط بگو کجاش برات نامشخصه.",
+    "نگران نباش؛ لازم نیست همه‌چی رو بدونی. ازت یکی‌یکی می‌پرسم 🌹",
 ]
 
 PRICE_DIFF_REPLIES = [
-    "قیمت‌ها ممکنه به‌روزرسانی شده باشن و با قیمت قدیمی پیج فرق داشته باشن. برای قیمت قطعی همینجا تأیید می‌کنم 🌹",
-    "بعضی پست‌های پیج با قیمت قبلی مونده‌ان. قیمت‌ها ممکنه تغییر کرده باشن؛ قبل از پرداخت قیمت قطعی رو تأیید می‌کنم.",
-    "قیمت پیج ممکنه مربوط به قبل باشه. موجودی و قیمت‌ها تغییر می‌کنن؛ برای خرید، مبلغ نهایی رو همینجا قطعی می‌کنم 👌"
+    "قیمت بعضی پست‌ها ممکنه مربوط به قبل باشه و موجودی یا قیمت تغییر کرده باشه. مبلغ نهایی قبل از پرداخت تأیید می‌شه 🌹",
+    "ممکنه قیمت داخل یک پست قدیمی‌تر باشه. قیمت نهایی همون موقع ثبت سفارش دوباره چک می‌شه 👌",
+    "قیمت‌ها ممکنه با زمان تغییر کنن، برای همین مبلغ نهایی قبل از پرداخت تأیید می‌شه.",
 ]
 
 SHIPPING_METHOD_REPLIES = [
     "ارسال ما فقط با پست پیشتاز انجام می‌شه 📦 تیپاکس، باربری، اتوبوس و روش‌های دیگه نداریم.",
-    "برای همه سفارش‌ها فقط پست پیشتاز داریم 🌹 امکان ارسال با تیپاکس، باربری یا اتوبوس نداریم.",
-    "روش ارسال فروشگاه فقط پست پیشتازه 📮 برای نظم سفارش‌ها از روش‌های دیگه ارسال نمی‌کنیم."
+    "برای همه سفارش‌ها فقط پست پیشتاز داریم عزیز 🌹 امکان ارسال با تیپاکس یا باربری نداریم.",
+    "روش ارسال فروشگاه فقط پست پیشتازه 📮 برای نظم سفارش‌ها از روش دیگه‌ای ارسال نمی‌کنیم.",
+    "فقط پست پیشتاز داریم رفیق 👌 ارسال با اتوبوس، باربری، تیپاکس یا پیک انجام نمی‌شه.",
 ]
 
 SHIPPING_COST_REPLIES = [
-    "هزینه ارسال کل سفارش فقط ۱۱۲٬۰۰۰ تومنه؛ فرقی نمی‌کنه ۱ محصول باشه یا تا سقف ۵۰ محصول 📦",
-    "پست کل سفارش ۱۱۲ هزار تومنه ✅ برای سفارش‌های ۱ تا ۵۰ عدد همین یک هزینه ثابت حساب می‌شه.",
-    "هزینه پست ثابت داریم: ۱۱۲٬۰۰۰ تومان برای کل سبد سفارش، نه برای هر محصول 🌹"
+    "هزینه ارسال کل سفارش فقط ۱۱۲٬۰۰۰ تومنه؛ از ۱ تا ۵۰ محصول همین یک هزینه حساب می‌شه 📦",
+    "پست کل سفارش ۱۱۲ هزار تومنه ✅ تعداد محصول تا سقف ۵۰ تا روی هزینه ارسال تغییری نمی‌ده.",
+    "هزینه پست ثابته: ۱۱۲٬۰۰۰ تومان برای کل سبد، نه برای هر محصول 🌹",
+    "چه یک محصول بگیری چه چندتا تا سقف ۵۰ عدد، هزینه ارسال کل سفارش ۱۱۲ هزار تومنه.",
 ]
 
 SHIPPING_CHEAP_REPLIES = [
-    "چون حجم ارسال‌های روزانه‌مون بالاست، هزینه ارسال رو به‌صورت تجمیعی مدیریت می‌کنیم و برای مشتری فقط ۱۱۲ هزار تومان حساب می‌شه 📦",
-    "به خاطر تعداد بالای مرسوله‌های روزانه، هزینه ارسال برای مشتری‌ها ثابت و اقتصادی در نظر گرفته شده؛ کل سفارش فقط ۱۱۲ هزار تومان.",
-    "ارسال‌هامون روزانه و پرتعداده، برای همین هزینه پست رو ثابت نگه داشتیم تا مشتری مجبور نباشه بابت هر محصول جدا هزینه بده 🌹"
+    "چون حجم ارسال‌های روزانه‌مون بالاست، هزینه ارسال رو تجمیعی مدیریت می‌کنیم و برای مشتری ثابت نگه می‌داریم 📦",
+    "به خاطر تعداد بالای مرسوله‌های روزانه، هزینه ارسال برای مشتری‌ها ثابت و اقتصادی در نظر گرفته شده 🌹",
+    "ارسال‌هامون پرتعداده و هزینه رو روی کل سفارش ثابت حساب می‌کنیم تا برای هر محصول جدا هزینه ندی 👌",
 ]
 
 SHIPPING_TIME_REPLIES = [
-    "ثبت و تحویل سفارش به پست معمولاً حدود ۳ تا ۵ روز کاری زمان می‌بره و مرسوله معمولاً حدود ۸ تا ۱۲ روز به دستتون می‌رسه 📦",
-    "زمان آماده‌سازی و ارسال حدود ۳ تا ۵ روز کاریه؛ بعد از اون، رسیدن بسته معمولاً در بازه ۸ تا ۱۲ روز انجام می‌شه.",
-    "سفارش‌ها معمولاً طی ۳ تا ۵ روز کاری وارد فرایند ارسال می‌شن و زمان رسیدن مرسوله معمولاً حدود ۸ تا ۱۲ روزه 🌹"
+    "آماده‌سازی و تحویل سفارش به پست معمولاً ۳ تا ۵ روز کاری زمان می‌بره و رسیدن مرسوله معمولاً حدود ۸ تا ۱۲ روزه 📦",
+    "معمولاً ۳ تا ۵ روز کاری برای آماده‌سازی و ارسال در نظر بگیر؛ رسیدن بسته هم معمولاً حدود ۸ تا ۱۲ روز زمان می‌بره.",
+    "سفارش طی حدود ۳ تا ۵ روز کاری وارد فرایند ارسال می‌شه و مرسوله معمولاً حدود ۸ تا ۱۲ روزه به دستت می‌رسه 🌹",
 ]
 
 SHIPPING_DAYS_REPLIES = [
-    "ارسال‌ها از شنبه تا پنجشنبه انجام می‌شن؛ جمعه ارسال نداریم 📦",
-    "روزهای ارسال فروشگاه شنبه تا پنجشنبه‌ست و جمعه مرسوله‌ای تحویل پست نمی‌شه.",
-    "مرسوله‌ها شنبه تا پنجشنبه ارسال می‌شن 🌹 جمعه ارسال نداریم."
+    "ارسال‌ها شنبه تا پنجشنبه انجام می‌شن؛ جمعه ارسال نداریم 📦",
+    "روزهای ارسال فروشگاه از شنبه تا پنجشنبه‌ست و جمعه مرسوله تحویل پست نمی‌شه.",
+    "مرسوله‌ها شنبه تا پنجشنبه ارسال می‌شن عزیز 🌹 جمعه ارسال نداریم.",
 ]
 
 LATE_DELIVERY_REPLIES = [
-    "صبور باشین لطفاً 🌹 سفارش ارسال شده؛ به خاطر تعداد بالای مرسوله‌ها ثبت یا نمایش کد رهگیری بعضی وقت‌ها با تأخیر انجام می‌شه. جای نگرانی نیست.",
-    "نگران نباشین 📦 مرسوله در فرایند ارساله. بعضی وقت‌ها به دلیل حجم بالای ارسال‌ها، ثبت کد رهگیری کمی دیرتر انجام می‌شه.",
-    "سفارشتون در مسیر ارسال قرار گرفته 🌹 به خاطر تعداد زیاد مرسوله‌ها ممکنه ثبت کد ارسالی با تأخیر باشه؛ لطفاً کمی زمان بدین."
+    "صبور باشین لطفاً 🌹 سفارش وارد فرایند ارسال شده؛ به خاطر تعداد بالای مرسوله‌ها ثبت یا نمایش کد رهگیری بعضی وقت‌ها با تأخیر انجام می‌شه.",
+    "نگران نباشین 📦 بعضی وقت‌ها به دلیل حجم بالای ارسال‌ها، ثبت کد رهگیری کمی دیرتر انجام می‌شه.",
+    "مرسوله در فرایند ارساله 🌹 به خاطر تعداد زیاد ارسال‌ها ممکنه ثبت کد ارسالی با کمی تأخیر انجام بشه.",
 ]
 
 LOW_PRICE_REPLIES = [
-    "قیمت‌گذاری ما بر اساس موجودی، حجم فروش و حاشیه سود پایین انجام می‌شه؛ برای همین بعضی مدل‌ها ممکنه از قیمت معمول بازار پایین‌تر باشن 🌹",
-    "بعضی محصولات رو با حاشیه سود کمتر و فروش مستقیم عرضه می‌کنیم، برای همین قیمت‌ها اقتصادی‌تر درمیاد. مشخصات هر محصول رو قبل از خرید می‌تونیم تأیید کنیم 👌",
-    "قیمت‌ها بسته به موجودی و شرایط تأمین تغییر می‌کنن و سعی می‌کنیم تا جای ممکن اقتصادی قیمت‌گذاری کنیم. برای هر محصول هم می‌تونی جزئیاتش رو جدا بپرسی 🌹"
+    "سعی می‌کنیم قیمت‌گذاری رو با حاشیه سود پایین‌تر و متناسب با موجودی انجام بدیم، برای همین بعضی مدل‌ها اقتصادی‌تر درمیاد 🌹",
+    "قیمت بعضی کارها به خاطر شرایط تأمین و حجم فروش پایین‌تر از معمول درمیاد. مشخصات هر محصول رو هم قبل از خرید می‌تونی جدا بپرسی 👌",
+    "قیمت‌ها بسته به موجودی و شرایط تأمین فرق می‌کنن و تا جای ممکن اقتصادی حساب می‌کنیم.",
+    "روی بعضی مدل‌ها سود رو کمتر می‌گیریم تا قیمت نهایی مناسب‌تر باشه 🌹",
 ]
 
-UNKNOWN_REPLIES = [
-    "متوجه منظورت نشدم 😅 یه جور دیگه برام بنویس تا دقیق راهنماییت کنم.",
-    "یکم واضح‌تر می‌گی لطفاً؟ 🌹 می‌خوام درست متوجه سوالت بشم.",
-    "منظورت رو کامل نگرفتم؛ اگه می‌شه کوتاه‌تر یا با کلمات دیگه بگو 👌",
-    "این پیام رو دقیق متوجه نشدم. دوباره یه مدل دیگه بیانش کن تا کمکت کنم 🌹"
+PRODUCT_QUALITY_REPLIES = [
+    "برای کیفیت یا جنس یک کار خاص، اسم یا عکس همون محصول رو بفرست تا درباره همون مدل راهنماییت کنم.",
+    "جنس هر مدل ممکنه فرق کنه؛ عکس یا اسم محصول رو بفرست تا دقیق‌تر بگم 👌",
+    "اگه منظورت کیفیت یه محصول خاصه، همون کار رو بفرست تا اشتباهی درباره مدل دیگه جواب ندم 🌹",
 ]
 
-ORDER_TRIGGERS = ["سفارش", "میخوام", "می‌خوام", "خرید", "ثبت سفارش", "بخرم"]
-PRICE_WORDS = ["قیمت", "چنده", "چند", "تومن", "تومان"]
-SIZE_WORDS = ["سایز", "اندازه", "فیت", "قد", "وزن"]
-PAY_WORDS = ["کارت", "پرداخت", "واریز", "شماره کارت"]
-PRICE_DIFF_WORDS = ["پیج", "فرق", "متفاوت", "گرون", "ارزون", "قیمت داخل"]
-SHIPPING_METHOD_WORDS = ["تیپاکس", "باربری", "اتوبوس", "ترمینال", "پیک", "چاپار"]
-SHIPPING_COST_WORDS = ["هزینه ارسال", "هزینه پست", "پست چنده", "ارسال چنده", "کرایه"]
-SHIPPING_CHEAP_WORDS = ["چرا ارسال پایینه", "چرا پست ارزونه", "چرا هزینه ارسال کمه", "چرا هزینه پست کمه"]
-SHIPPING_TIME_WORDS = ["چند روزه", "کی میرسه", "کی می‌رسه", "زمان ارسال", "چقدر طول میکشه", "چقدر طول می‌کشه"]
-SHIPPING_DAYS_WORDS = ["چه روز", "روزهای ارسال", "جمعه ارسال", "کی ارسال میکنید", "کی ارسال می‌کنید"]
-LATE_WORDS = ["هنوز نرسیده", "چرا نرسیده", "به دستم نرسیده", "کد رهگیری", "کد ارسالی", "ارسال نکردید", "ارسال نکردین"]
-LOW_PRICE_WORDS = ["چرا قیمتاتون پایینه", "چرا قیمت پایین", "چرا ارزونه", "چرا ارزون", "قیمتاتون چرا کمه"]
+RETURN_REPLIES = [
+    "شرایط تعویض یا مرجوعی باید بر اساس قوانین خود فروشگاه تأیید بشه. اگر محصول خاصی مدنظرته بگو تا موضوع رو برای سفارش همون مورد ثبت کنیم.",
+    "برای تعویض و مرجوعی بهتره شرایط سفارش مشخص باشه؛ شماره سفارش یا محصول رو بفرست تا دقیق‌تر راهنماییت کنم.",
+]
+
+STOCK_REPLIES = [
+    "اسم یا عکس دقیق محصول رو بفرست تا درباره موجودی همون مدل بررسیش کنیم 👌",
+    "برای موجودی، خود محصول رو بفرست عزیز؛ اسم مدل، رنگ یا عکسش کافیه 🌹",
+]
+
+COLOR_REPLIES = [
+    "اسم یا عکس محصول رو بفرست و بگو چه رنگی مدنظرته تا دقیق‌تر راهنماییت کنم 🌹",
+    "رنگ‌بندی برای هر مدل فرق می‌کنه؛ محصول رو بفرست تا درباره همون کار صحبت کنیم 👌",
+]
+
+SIZE_ASK_REPLIES = [
+    "قد و وزنت رو بفرست؛ مثلاً «قد ۱۸۰ وزن ۸۰». اگه فیت آزاد یا جذب دوست داری اونم بگو 👌",
+    "برای پیشنهاد سایز، قد + وزن رو بگو و بگو لباس رو معمولی می‌پوشی یا آزاد 🌹",
+    "قد و وزن رو بده رفیق؛ یه سایز تقریبی بهت پیشنهاد می‌دم. اگه دور سینه هم داشته باشی دقیق‌تر می‌شه.",
+]
+
+# ------------------------------------------------------------
+# Text normalization and fuzzy understanding
+# ------------------------------------------------------------
+
+PERSIAN_DIGITS = str.maketrans(
+    "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩",
+    "01234567890123456789"
+)
+
+# Common Persian chat typos/slang. It is deliberately compact:
+# fuzzy matching below also covers unseen misspellings.
+TOKEN_CANON = {
+    "میخوام": "میخوام",
+    "میخام": "میخوام",
+    "میخاهم": "میخوام",
+    "میخوامش": "میخوام",
+    "میخای": "میخوای",
+    "میخاهی": "میخوای",
+    "میخامش": "میخوام",
+    "چندع": "چنده",
+    "چندست": "چنده",
+    "چقد": "چقدر",
+    "چقذر": "چقدر",
+    "قیمتش": "قیمت",
+    "قیمط": "قیمت",
+    "گیمت": "قیمت",
+    "قیمتو": "قیمت",
+    "ارسالوت": "ارسال",
+    "ارسالش": "ارسال",
+    "ارسال": "ارسال",
+    "پوصت": "پست",
+    "پصت": "پست",
+    "پستش": "پست",
+    "تیباکس": "تیپاکس",
+    "تیپاکث": "تیپاکس",
+    "سایض": "سایز",
+    "سایس": "سایز",
+    "سایزش": "سایز",
+    "وزنم": "وزن",
+    "قدم": "قد",
+    "نمدونم": "نمیدونم",
+    "نمیدونم": "نمیدونم",
+    "نمیدنم": "نمیدونم",
+    "نمیدانم": "نمیدونم",
+    "نمیفهمم": "نمیفهمم",
+    "چیمیگی": "چی میگی",
+    "چیمگی": "چی میگی",
+    "چیگفتی": "چی گفتی",
+    "وایسا": "وایسا",
+    "وایستا": "وایسا",
+    "صبرکن": "صبر کن",
+    "شماره": "شماره",
+    "شمارع": "شماره",
+    "موبایل": "موبایل",
+    "موبایل": "موبایل",
+    "ادرس": "آدرس",
+    "آدرص": "آدرس",
+    "فامیلی": "فامیلی",
+    "فامیل": "فامیلی",
+    "مرجوع": "مرجوعی",
+    "تعویضش": "تعویض",
+    "اورج": "اورجینال",
+    "اورجیناله": "اورجینال",
+}
+
+def normalize_text(text):
+    text = unicodedata.normalize("NFKC", text or "")
+    text = text.translate(PERSIAN_DIGITS)
+    text = text.replace("ي", "ی").replace("ك", "ک").replace("ۀ", "ه").replace("ة", "ه")
+    text = text.replace("\u200c", " ")
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s\u0600-\u06FF]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return ""
+    words = []
+    for token in text.split():
+        words.append(TOKEN_CANON.get(token, token))
+    return " ".join(words)
+
+def similarity(a, b):
+    a, b = normalize_text(a), normalize_text(b)
+    if not a or not b:
+        return 0.0
+    if a in b or b in a:
+        shorter = min(len(a), len(b))
+        longer = max(len(a), len(b))
+        if shorter >= 3:
+            return max(0.88, shorter / max(longer, 1))
+    seq = SequenceMatcher(None, a, b).ratio()
+    aw, bw = set(a.split()), set(b.split())
+    jac = len(aw & bw) / max(1, len(aw | bw))
+    return max(seq, jac)
+
+def fuzzy_any(text, phrases, threshold=0.70):
+    n = normalize_text(text)
+    if not n:
+        return False
+    if any(normalize_text(p) in n for p in phrases):
+        return True
+
+    words = n.split()
+    # Compare phrase against local n-grams too, so typos inside long sentences
+    # do not destroy intent recognition.
+    for phrase in phrases:
+        p = normalize_text(phrase)
+        pw = p.split()
+        sizes = range(max(1, len(pw)-1), min(len(words), len(pw)+2)+1)
+        for size in sizes:
+            for i in range(0, len(words)-size+1):
+                chunk = " ".join(words[i:i+size])
+                if similarity(chunk, p) >= threshold:
+                    return True
+    return False
+
+INTENTS = {
+    "greeting": ["سلام", "درود", "سلام خوبی", "سلام وقت بخیر", "hello", "hi"],
+    "wait": ["وایسا", "صبر کن", "یه لحظه", "الان نه", "فعلا صبر کن", "باش تا بگم"],
+    "confused": ["چی میگی", "چی گفتی", "منظورت چیه", "نفهمیدم", "نمیفهمم", "چی باید بفرستم"],
+    "dont_know": ["نمیدونم", "نمی دونم", "اطلاع ندارم", "بلد نیستم", "نمدونم"],
+    "thanks": ["مرسی", "ممنون", "دمت گرم", "تشکر", "سپاس"],
+    "bye": ["خدافظ", "خداحافظ", "فعلا", "بای", "روز خوش"],
+    "order": ["ثبت سفارش", "سفارش میخوام", "میخوام بخرم", "خرید کنم", "سفارش", "بخرم"],
+    "price": ["قیمت چنده", "چنده", "قیمت", "چقدر قیمت", "تومن", "تومان"],
+    "price_difference": ["چرا قیمت پیج فرق", "قیمت داخل پیج فرق", "پیج ارزونتر", "پیج گرونتر"],
+    "low_price": ["چرا قیمتاتون پایینه", "چرا ارزونه", "چرا قیمت پایین", "چرا انقدر ارزونه"],
+    "size": ["چه سایزی", "سایز من", "سایز", "اندازه", "قد و وزن", "چه سایز بگیرم"],
+    "shipping_cost": ["هزینه ارسال", "هزینه پست", "پست چنده", "ارسال چنده", "کرایه"],
+    "shipping_time": ["چند روزه میرسه", "کی میرسه", "زمان ارسال", "چقدر طول میکشه", "چند روز طول میکشه"],
+    "shipping_days": ["چه روزهایی ارسال", "جمعه ارسال", "روز ارسال", "کی ارسال میکنید"],
+    "shipping_method": ["تیپاکس", "باربری", "اتوبوس", "ترمینال", "چاپار", "پیک بفرست"],
+    "late": ["هنوز نرسیده", "چرا نرسیده", "به دستم نرسیده", "کد رهگیری", "کد ارسالی"],
+    "payment": ["شماره کارت", "کارت بده", "پرداخت", "واریز", "چطور پرداخت"],
+    "stock": ["موجوده", "موجودی", "دارین", "دارید", "تموم نشده"],
+    "color": ["چه رنگی", "رنگ بندی", "رنگبندی", "رنگ دیگه", "مشکی دارین", "سفید دارین"],
+    "quality": ["جنسش چیه", "کیفیت", "پارچه", "جنس", "ضخامت", "گرماژ"],
+    "original": ["اورجینال", "اصل هست", "فیکه", "اصله", "های کپی"],
+    "return": ["مرجوع", "تعویض", "پس بدم", "پس گرفتن", "تعویض سایز"],
+}
+
+INTENT_PRIORITY = [
+    "wait", "confused", "dont_know", "price_difference", "shipping_method",
+    "shipping_cost", "shipping_time", "shipping_days", "late", "low_price",
+    "size", "payment", "stock", "color", "quality", "original", "return",
+    "order", "price", "greeting", "thanks", "bye"
+]
+
+def detect_intent(text):
+    n = normalize_text(text)
+    if not n:
+        return None
+
+    # Structured height/weight message should be handled as sizing before "price"
+    if ("قد" in n and re.search(r"\d{3}", n)) or ("وزن" in n and re.search(r"\d{2,3}", n)):
+        return "size"
+
+    thresholds = {
+        "greeting": 0.76,
+        "wait": 0.70,
+        "confused": 0.68,
+        "dont_know": 0.68,
+        "price": 0.74,
+        "size": 0.72,
+    }
+    for intent in INTENT_PRIORITY:
+        if fuzzy_any(n, INTENTS[intent], thresholds.get(intent, 0.72)):
+            return intent
+    return None
+
+
+# ------------------------------------------------------------
+# V9 smart understanding layer
+# ------------------------------------------------------------
+
+# Extra aliases intentionally focus on how Persian customers actually type:
+# short forms, slang, missing نیم‌فاصله, and common spelling mistakes.
+SMART_CATEGORY_PHRASES = {
+    "price": ["قیمت", "چنده", "چند درمیاد", "قیمط", "قیمتش", "فی", "مبلغ"],
+    "discount": ["تخفیف", "تخفیف میدی", "کم نمیکنی", "راه نداره", "آخرش چند", "قیمت آخر", "آف"],
+    "last_price": ["قیمت آخر", "آخرش چند", "تهش چند", "آخر قیمت"],
+    "wholesale_price": ["عمده", "قیمت عمده", "همکاری", "تعداد بالا قیمت"],
+    "stock": ["موجود", "دارین", "دارید", "هست", "تموم", "ناموجود"],
+    "restock": ["شارژ میشه", "کی موجود میشه", "دوباره میارین", "شارژ مجدد"],
+    "color": ["رنگ", "رنگبندی", "چه رنگ", "مشکی", "سفید", "آبی", "قرمز"],
+    "size": ["سایز", "اندازه", "چه سایزی", "سایضم", "سایض", "لارج", "ایکس لارج"],
+    "height_weight": ["قد", "وزن", "قدم", "وزنم", "قد و وزن"],
+    "between_sizes": ["بین دو سایز", "بین لارج و ایکس", "کدوم سایز بهتره"],
+    "size_chart": ["جدول سایز", "اندازه ها", "اندازه سایزها", "سایز چارت"],
+    "fabric": ["جنس", "پارچه", "جنسش", "چه جنسی"],
+    "quality": ["کیفیت", "کیفیته", "خوبه", "جنس خوبه", "دوام"],
+    "thickness": ["ضخیم", "نازک", "ضخامت", "گرماژ"],
+    "stretch": ["کشی", "کش میاد", "کشسان"],
+    "lining": ["کرکی", "داخل کرک", "تو کرک"],
+    "warmth": ["گرمه", "گرم", "زمستونی"],
+    "shrink": ["آبرفت", "آب میره", "جمع میشه"],
+    "colorfast": ["رنگ میده", "رنگ پس میده", "رنگ دهی"],
+    "pilling": ["پرز", "پرز میده", "گلوله میشه"],
+    "washing": ["شستشو", "بشورم", "ماشین لباسشویی", "چطور بشورم"],
+    "original": ["اصل", "اورجینال", "فیک", "های کپی", "اصله"],
+    "brand": ["برند", "مارک", "چه مارکی"],
+    "country": ["ساخت کجا", "کشور سازنده", "تولید کجا"],
+    "photo": ["عکس", "تصویر", "عکسشو"],
+    "real_photo": ["عکس واقعی", "عکس خود کار", "عکس رئال"],
+    "video": ["ویدیو", "ویدئو", "فیلم", "فیلمشو"],
+    "model_photo": ["تنخور", "تن خور", "روی تن", "عکس تن"],
+    "order": ["سفارش", "ثبت سفارش", "بخرم", "میخوامش", "خرید"],
+    "add_item": ["اضافه کن", "یکی دیگه", "اینم اضافه", "یه کار دیگه"],
+    "remove_item": ["حذف کن", "نمیخوامش", "بردارش", "این رو نمیخوام"],
+    "edit_order": ["ویرایش", "عوض کنم", "تغییر سفارش", "اشتباه زدم"],
+    "cancel": ["لغو", "کنسل", "سفارش نمیخوام", "بیخیال سفارش"],
+    "quantity": ["تعداد", "چندتا", "چند تا", "عدد"],
+    "cart": ["سبد", "چی سفارش دادم", "لیست سفارشم"],
+    "total": ["جمع", "جمع کل", "همش چند", "مجموع"],
+    "payment": ["پرداخت", "واریز", "کارت به کارت", "پول"],
+    "card": ["شماره کارت", "کارت بده", "شماره حساب"],
+    "receipt": ["رسید", "فیش", "عکس واریز"],
+    "shipping": ["ارسال", "پست", "فرستادن", "ارسالش"],
+    "shipping_fee": ["هزینه پست", "هزینه ارسال", "پست چنده", "کرایه", "هزینه پوصت"],
+    "shipping_method": ["تیپاکس", "تیباکس", "تیباکث", "چاپار", "باربری", "اتوبوس", "پیک"],
+    "shipping_time": ["کی میرسه", "چند روزه", "زمان ارسال", "چقدر طول میکشه"],
+    "tracking": ["کد رهگیری", "رهگیری", "ترکینگ", "کد پست"],
+    "late_delivery": ["نرسیده", "دیر شده", "چرا نیومده", "هنوز نیومده"],
+    "return": ["مرجوع", "پس بدم", "برگردونم"],
+    "exchange": ["تعویض", "عوض کنم", "تعویض سایز"],
+    "wrong_item": ["اشتباه فرستادین", "محصول اشتباه", "یه چیز دیگه اومده"],
+    "damaged": ["خراب", "پاره", "آسیب", "لکه", "ایراد"],
+    "trust": ["اعتماد", "معتبر", "مطمئن", "کلاهبرداری", "اسکم"],
+    "store_address": ["آدرس مغازه", "آدرس فروشگاه", "حضوری کجایین"],
+    "in_person": ["حضوری", "خرید حضوری", "بیام مغازه"],
+    "working_hours": ["ساعت کاری", "کی بازین", "چه ساعتی"],
+    "recommend": ["پیشنهاد", "چی بخرم", "چی خوبه", "کدوم بهتره"],
+    "gift": ["هدیه", "کادو", "برای دوست", "برای شوهر", "برای پسر"],
+    "comparison": ["کدوم بهتره", "مقایسه", "فرق این دوتا", "چه فرقی"],
+    "wait": ["وایسا", "صبر", "یه لحظه", "الان نه"],
+    "confused": ["چی میگی", "چی گفتی", "نفهمیدم", "متوجه نشدم", "منظورت چیه"],
+    "dont_know": ["نمیدونم", "نمدونم", "بلد نیستم", "اطلاع ندارم"],
+    "thanks": ["مرسی", "ممنون", "دمت گرم", "تشکر"],
+    "bye": ["خدافظ", "خداحافظ", "فعلا", "بای"],
+}
+
+SMART_TYPO_WORDS = {
+    "قیمط":"قیمت", "قیمتشع":"قیمتش", "چنذع":"چنده", "چندع":"چنده",
+    "پوصت":"پست", "پوصط":"پست", "تیباکس":"تیپاکس", "تیباکث":"تیپاکس",
+    "سایض":"سایز", "سایضم":"سایزم", "نمدونم":"نمیدونم", "نمیدنم":"نمیدونم",
+    "میخام":"میخوام", "میخاد":"میخواد", "ادرس":"آدرس", "اورجینل":"اورجینال",
+    "موجوذه":"موجوده", "مرجوعیع":"مرجوعی", "رهگیریی":"رهگیری",
+}
+
+QUESTIONISH = {
+    "price","discount","last_price","wholesale_price","stock","restock","color","size",
+    "height_weight","between_sizes","size_chart","fabric","quality","thickness","stretch",
+    "lining","warmth","shrink","colorfast","pilling","washing","original","brand","country",
+    "photo","real_photo","video","model_photo","shipping","shipping_fee","shipping_method",
+    "shipping_time","tracking","late_delivery","return","exchange","wrong_item","damaged",
+    "trust","store_address","in_person","working_hours","recommend","gift","comparison",
+    "payment","card","receipt","total","cart"
+}
+
+CATEGORY_TO_CORE = {
+    "shipping_fee":"shipping_cost", "shipping":"shipping_time", "tracking":"late",
+    "late_delivery":"late", "exchange":"return", "fabric":"quality", "thickness":"quality",
+    "stretch":"quality", "lining":"quality", "warmth":"quality", "shrink":"quality",
+    "colorfast":"quality", "pilling":"quality", "card":"payment", "receipt":"payment",
+    "height_weight":"size", "between_sizes":"size", "size_chart":"size",
+}
+
+def smart_normalize(text):
+    n = normalize_text(text)
+    words = [SMART_TYPO_WORDS.get(w, w) for w in n.split()]
+    return " ".join(words)
+
+def looks_like_question(text):
+    n = smart_normalize(text)
+    if "?" in text or "؟" in text:
+        return True
+    question_phrases = [
+        "چه رنگ", "چه سایز", "می شه", "میخوام بدونم",
+        "قیمت", "هزینه", "ارسال", "پست", "تعویض", "مرجوع",
+        "اورجینال", "اصله", "فیکه"
+    ]
+    if any(smart_normalize(q) in n for q in question_phrases):
+        return True
+    question_tokens = {
+        "چند","چقدر","چجوری","چطور","چرا","کی","کجا","کدوم",
+        "دارین","دارید","موجوده","میشه","بگین","بگو"
+    }
+    return any(tok in question_tokens for tok in n.split())
+
+def _phrase_score(n, phrase):
+    p = smart_normalize(phrase)
+    if not p:
+        return 0.0
+    words=n.split()
+    pwords=p.split()
+
+    # Short one-word aliases (e.g. "قد", "کی") must match a token, not a
+    # substring inside unrelated words such as "چقدره" or "مشکی".
+    if len(pwords)==1 and len(p)<=4:
+        if p in words:
+            return 0.95
+        best=max([similarity(w,p) for w in words] or [0.0])
+        return best*0.90 if best>=0.90 else 0.0
+
+    if p in n:
+        return min(1.0, 0.86 + min(len(p), 20) / 150.0)
+    nw, pw = set(words), set(pwords)
+    overlap = len(nw & pw) / max(1, len(pw))
+    seq = similarity(n, p)
+    chunks=[]
+    plen=max(1,len(pwords))
+    for size in range(max(1,plen-1), min(len(words),plen+2)+1):
+        chunks += [" ".join(words[i:i+size]) for i in range(len(words)-size+1)]
+    local=max([similarity(c,p) for c in chunks] or [0.0])
+    return max(overlap*0.88, seq*0.72, local*0.92)
+
+def detect_categories(text, limit=5):
+    n = smart_normalize(text)
+    if not n:
+        return []
+    scored=[]
+    for category, phrases in SMART_CATEGORY_PHRASES.items():
+        score=max((_phrase_score(n,p) for p in phrases), default=0)
+        threshold = 0.70 if category in {"wait","confused","dont_know"} else 0.74
+        if score >= threshold:
+            scored.append((category, score))
+    scored.sort(key=lambda x:(-x[1], -max((len(p) for p in SMART_CATEGORY_PHRASES[x[0]]),default=0)))
+    # Avoid near-duplicate categories in the same answer.
+    out=[]
+    for cat,score in scored:
+        if cat not in out:
+            out.append(cat)
+        if len(out)>=limit:
+            break
+    return out
+
+def detect_core_intents(text):
+    """Return more than one core intent when the customer asks several questions."""
+    cats=detect_categories(text, limit=8)
+    cores=[]
+    for cat in cats:
+        core=CATEGORY_TO_CORE.get(cat, cat)
+        if core in INTENTS and core not in cores:
+            cores.append(core)
+    fallback=detect_intent(text)
+    if fallback and fallback not in cores:
+        cores.append(fallback)
+    return cores
+
+def bank_answer(category):
+    pool=RESPONSES.get(category)
+    if not pool:
+        pool=RESPONSES.get("unclear") or RESPONSES.get("confused") or UNKNOWN_REPLIES
+    return random.choice(pool)
+
+def answer_category(category, text, chat_id):
+    core=CATEGORY_TO_CORE.get(category, category)
+    if core in INTENTS:
+        ans=answer_intent(core, text, chat_id)
+        if ans:
+            return ans
+    # Long-tail categories use the corresponding 100K bank category. These are
+    # deliberately non-committal when store-specific facts are unknown.
+    return bank_answer(category)
+
+def multi_question_answer(text, chat_id, max_answers=3):
+    cats=[c for c in detect_categories(text, limit=8) if c in QUESTIONISH]
+    # Remove semantically overlapping answers.
+    chosen=[]
+    seen_core=set()
+    for c in cats:
+        core=CATEGORY_TO_CORE.get(c,c)
+        group = core if core in INTENTS else c
+        if group in seen_core:
+            continue
+        seen_core.add(group)
+        chosen.append(c)
+        if len(chosen)>=max_answers:
+            break
+    if len(chosen)<2:
+        return None
+    parts=[]
+    for c in chosen:
+        a=answer_category(c,text,chat_id)
+        if a:
+            parts.append("• "+a)
+    return "\n\n".join(parts) if len(parts)>=2 else None
+
+# ------------------------------------------------------------
+# Small talk / response composition
+# ------------------------------------------------------------
+
+def compose(body, close=True):
+    opener = random.choice(FRIENDLY_OPENERS)
+    closer = random.choice(SOFT_CLOSERS) if close else ""
+    parts = [opener, body]
+    if closer:
+        parts.append(closer)
+    return " ".join(p for p in parts if p).strip()
+
+def state_explanation(state):
+    mapping = {
+        "await_product_count": "فقط می‌خوام بدونم چند محصول می‌خوای. مثلاً بنویس «3». اگه چندتا از یک مدل می‌خوای می‌تونی بنویسی «5 تا هودی مشکی».",
+        "await_item_name": "دارم محصول‌های سفارشت رو یکی‌یکی ثبت می‌کنم. فقط اسم محصولی که الان می‌خوای اضافه بشه رو بفرست.",
+        "confirm_cart": "لیست محصولات رو بستیم؛ فقط می‌خوام بدونم محصول دیگه‌ای اضافه می‌کنی یا همین‌ها نهایی بشن.",
+        "await_add_count": "گفتی محصول بیشتری می‌خوای؛ فقط تعداد محصول‌های جدید رو بگو.",
+        "await_size": "الان فقط سایز هر محصول رو لازم دارم. اگه سایزت رو نمی‌دونی، قد و وزنت رو بفرست تا راهنماییت کنم.",
+        "await_height_weight": "سایزت رو با قد و وزن حدودی پیشنهاد می‌دم. مثلاً بنویس «قد 180 وزن 80، فیت معمولی».",
+        "await_name": "برای ثبت سفارش فقط اسم و فامیلی تحویل‌گیرنده رو لازم دارم.",
+        "await_phone": "شماره موبایل گیرنده رو برای اطلاعات سفارش و ارسال لازم دارم؛ مثل 09123456789.",
+        "await_address": "الان آدرس ارسال رو لازم دارم؛ شهر، خیابون و پلاک رو بنویس. کدپستی اگر داری بهتره.",
+        "await_receipt": "سفارش ثبت شده و الان منتظر عکس رسید واریز هستم. اگه سوالی داری قبلش بپرس.",
+    }
+    return mapping.get(state, "بگو دقیقاً کدوم بخش رو می‌خوای توضیح بدم تا ساده بگم.")
+
+def resume_prompt(state, chat_id):
+    c = get_chat(chat_id)
+    if state == "await_product_count":
+        return "خب، برای ادامه فقط تعداد محصول رو بفرست؛ بین ۱ تا ۵۰."
+    if state == "await_item_name":
+        current = int(c["collected_items"] or 0) + 1
+        expected = int(c["expected_items"] or 1)
+        return f"برای ادامه اسم محصول شماره {current} از {expected} رو بفرست."
+    if state == "confirm_cart":
+        return "برای ادامه بنویس «همین‌ها» یا «اضافه»."
+    if state == "await_add_count":
+        remaining = MAX_ITEMS_PER_ORDER - cart_unit_count(chat_id)
+        return f"برای ادامه تعداد محصول‌های جدید رو بگو؛ حداکثر {remaining} عدد."
+    if state == "await_size":
+        return "برای ادامه سایزها رو بگو؛ اگر نمی‌دونی بنویس «نمیدونم» تا با قد و وزن راهنماییت کنم."
+    if state == "await_height_weight":
+        return "قد و وزنت رو بفرست؛ مثلاً «قد 180 وزن 80»."
+    if state == "await_name":
+        return "برای ادامه اسم و فامیلی تحویل‌گیرنده رو بفرست."
+    if state == "await_phone":
+        return "برای ادامه شماره موبایل گیرنده رو بفرست."
+    if state == "await_address":
+        return "برای ادامه آدرس کامل ارسال رو بفرست."
+    if state == "await_receipt":
+        return "هر وقت واریز کردی، عکس رسید رو همینجا بفرست."
+    return ""
+
+# ------------------------------------------------------------
+# Size recommendation
+# ------------------------------------------------------------
+
+def extract_height_weight(text):
+    n = normalize_text(text)
+    height = None
+    weight = None
+
+    mh = re.search(r"(?:قد|قدم)\s*[:\-]?\s*(1\d{2}|20\d|21\d)", n)
+    mw = re.search(r"(?:وزن|وزنم)\s*[:\-]?\s*(\d{2,3})", n)
+    if mh:
+        height = int(mh.group(1))
+    if mw:
+        weight = int(mw.group(1))
+
+    nums = [int(x) for x in re.findall(r"\b\d{2,3}\b", n)]
+    if height is None:
+        h_candidates = [x for x in nums if 140 <= x <= 215]
+        if h_candidates:
+            height = h_candidates[0]
+    if weight is None:
+        w_candidates = [x for x in nums if 40 <= x <= 180 and x != height]
+        if w_candidates:
+            weight = w_candidates[0]
+
+    return height, weight
+
+def detect_fit(text):
+    n = normalize_text(text)
+    if fuzzy_any(n, ["آزاد", "اورسایز", "لش", "گشاد"], 0.72):
+        return "loose"
+    if fuzzy_any(n, ["جذب", "فیت", "چسبان"], 0.72):
+        return "slim"
+    return "regular"
+
+SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL", "4XL"]
+
+def shift_size(size, delta):
+    try:
+        i = SIZE_ORDER.index(size)
+    except ValueError:
+        return size
+    return SIZE_ORDER[max(0, min(len(SIZE_ORDER)-1, i+delta))]
+
+def recommend_size(height, weight, fit="regular"):
+    # Practical heuristic for men's tops/hoodies, not a guarantee.
+    # Brand/pattern/chest circumference can change the result.
+    score = weight + max(0, height - 170) * 0.35
+    if score < 58:
+        size = "S"
+    elif score < 68:
+        size = "M"
+    elif score < 80:
+        size = "L"
+    elif score < 94:
+        size = "XL"
+    elif score < 108:
+        size = "2XL"
+    elif score < 123:
+        size = "3XL"
+    else:
+        size = "4XL"
+
+    if fit == "loose":
+        size = shift_size(size, 1)
+    elif fit == "slim":
+        size = shift_size(size, -1)
+    return size
+
+def size_answer(text):
+    h, w = extract_height_weight(text)
+    if not h or not w:
+        return random.choice(SIZE_ASK_REPLIES), None
+    if not (140 <= h <= 215 and 40 <= w <= 180):
+        return "قد یا وزن رو درست متوجه نشدم. مثلاً بنویس «قد 180 وزن 80».", None
+
+    fit = detect_fit(text)
+    size = recommend_size(h, w, fit)
+    fit_fa = {"loose": "آزاد", "slim": "جذب‌تر", "regular": "معمولی"}[fit]
+    body = (
+        f"با قد {h} و وزن {w} و فیت {fit_fa}، پیشنهاد تقریبی من {size} هست 👌 "
+        "البته الگوی هر لباس فرق می‌کنه؛ اگه دور سینه یا سایزی که معمولاً می‌پوشی رو هم بگی دقیق‌تر می‌تونم راهنمایی کنم."
+    )
+    return body, size
+
+# ------------------------------------------------------------
+# Database
+# ------------------------------------------------------------
 
 def db():
     conn = sqlite3.connect(DB_PATH)
@@ -127,12 +729,14 @@ def init_db():
         )
     """)
     cols = {row[1] for row in conn.execute("PRAGMA table_info(chats)").fetchall()}
-    if "expected_items" not in cols:
-        conn.execute("ALTER TABLE chats ADD COLUMN expected_items INTEGER DEFAULT 0")
-    if "collected_items" not in cols:
-        conn.execute("ALTER TABLE chats ADD COLUMN collected_items INTEGER DEFAULT 0")
-    if "misunderstood_count" not in cols:
-        conn.execute("ALTER TABLE chats ADD COLUMN misunderstood_count INTEGER DEFAULT 0")
+    migrations = {
+        "expected_items": "INTEGER DEFAULT 0",
+        "collected_items": "INTEGER DEFAULT 0",
+        "misunderstood_count": "INTEGER DEFAULT 0",
+    }
+    for col, spec in migrations.items():
+        if col not in cols:
+            conn.execute(f"ALTER TABLE chats ADD COLUMN {col} {spec}")
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS cart_items(
@@ -158,6 +762,7 @@ def init_db():
             PRIMARY KEY(chat_id, normalized_name)
         )
     """)
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS orders(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,6 +778,7 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS order_items(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,39 +789,12 @@ def init_db():
             quantity INTEGER DEFAULT 1
         )
     """)
-    order_cols = {row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()}
-    if "quantity" not in order_cols:
+    oi_cols = {row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()}
+    if "quantity" not in oi_cols:
         conn.execute("ALTER TABLE order_items ADD COLUMN quantity INTEGER DEFAULT 1")
+
     conn.commit()
     conn.close()
-
-
-def api(method, data=None):
-    r = requests.post(f"{API}/{method}", data=data or {}, timeout=65)
-    r.raise_for_status()
-    payload = r.json()
-    if not payload.get("ok"):
-        raise RuntimeError(payload)
-    return payload["result"]
-
-def send_business(connection_id, chat_id, text):
-    return api("sendMessage", {
-        "business_connection_id": connection_id,
-        "chat_id": chat_id,
-        "text": text
-    })
-
-def send_admin(text):
-    if ADMIN_ID:
-        return api("sendMessage", {"chat_id": ADMIN_ID, "text": text})
-
-def send_admin_photo(file_id, caption):
-    if ADMIN_ID:
-        return api("sendPhoto", {
-            "chat_id": ADMIN_ID,
-            "photo": file_id,
-            "caption": caption
-        })
 
 def get_setting(key, default=""):
     conn = db()
@@ -233,12 +812,6 @@ def set_setting(key, value):
     conn.commit()
     conn.close()
 
-def get_chat(chat_id):
-    conn = db()
-    row = conn.execute("SELECT * FROM chats WHERE chat_id=?", (chat_id,)).fetchone()
-    conn.close()
-    return row
-
 def ensure_chat(chat_id, connection_id):
     conn = db()
     conn.execute(
@@ -249,38 +822,74 @@ def ensure_chat(chat_id, connection_id):
     conn.commit()
     conn.close()
 
+def get_chat(chat_id):
+    conn = db()
+    row = conn.execute("SELECT * FROM chats WHERE chat_id=?", (chat_id,)).fetchone()
+    conn.close()
+    return row
+
 def update_chat(chat_id, **kwargs):
     if not kwargs:
         return
     conn = db()
-    fields = ", ".join(f"{k}=?" for k in kwargs.keys())
+    fields = ", ".join(f"{k}=?" for k in kwargs)
     vals = list(kwargs.values()) + [chat_id]
     conn.execute(f"UPDATE chats SET {fields} WHERE chat_id=?", vals)
     conn.commit()
     conn.close()
 
+# ------------------------------------------------------------
+# Telegram API
+# ------------------------------------------------------------
+
+def api(method, data=None):
+    r = requests.post(f"{API}/{method}", data=data or {}, timeout=65)
+    r.raise_for_status()
+    payload = r.json()
+    if not payload.get("ok"):
+        raise RuntimeError(payload)
+    return payload["result"]
+
+def send_business(connection_id, chat_id, text):
+    return api("sendMessage", {
+        "business_connection_id": connection_id,
+        "chat_id": chat_id,
+        "text": text,
+    })
+
+def send_admin(text):
+    if ADMIN_ID:
+        return api("sendMessage", {"chat_id": ADMIN_ID, "text": text})
+
+def send_admin_photo(file_id, caption):
+    if ADMIN_ID:
+        return api("sendPhoto", {
+            "chat_id": ADMIN_ID,
+            "photo": file_id,
+            "caption": caption[:1024],
+        })
+
+# ------------------------------------------------------------
+# Shop utilities
+# ------------------------------------------------------------
+
 def fmt_price(n):
-    return f"{n:,}".replace(",", "٬") + " تومان"
+    return f"{int(n):,}".replace(",", "٬") + " تومان"
 
 def random_price():
     n = random.randrange(PRICE_MIN // 10_000, PRICE_MAX // 10_000 + 1) * 10_000
     return min(max(n, PRICE_MIN), PRICE_MAX)
 
-
-MAX_ITEMS_PER_ORDER = 50
-
 def normalize_product_name(name):
-    t = (name or "").strip().lower()
-    t = t.replace("ي", "ی").replace("ك", "ک").replace("ۀ", "ه").replace("ة", "ه")
-    t = re.sub(r"[^\w\s\u0600-\u06FF]", " ", t)
-    t = re.sub(r"\s+", " ", t).strip()
+    t = normalize_text(name)
+    # remove quantity boilerplate so "3 تا هودی" and "هودی" share the same price
+    t = re.sub(r"^\d+\s*(?:تا|عدد|دونه|دانه)\s*(?:از\s+)?", "", t).strip()
     return t
 
 def get_or_create_product_price(chat_id, product_name):
     normalized = normalize_product_name(product_name)
     if not normalized:
         return random_price()
-
     conn = db()
     row = conn.execute(
         "SELECT price FROM product_price_history WHERE chat_id=? AND normalized_name=?",
@@ -290,7 +899,6 @@ def get_or_create_product_price(chat_id, product_name):
         price = int(row["price"])
         conn.close()
         return price
-
     price = random_price()
     conn.execute(
         "INSERT OR IGNORE INTO product_price_history(chat_id,normalized_name,display_name,price,created_at) "
@@ -314,7 +922,7 @@ def clear_cart(chat_id):
 def cart_items(chat_id):
     conn = db()
     rows = conn.execute(
-        "SELECT position, product_name, price, COALESCE(quantity,1) AS quantity "
+        "SELECT position,product_name,price,COALESCE(quantity,1) AS quantity "
         "FROM cart_items WHERE chat_id=? ORDER BY position",
         (chat_id,)
     ).fetchall()
@@ -326,14 +934,10 @@ def cart_unit_count(chat_id):
 
 def add_cart_item(chat_id, product_name, quantity=1):
     quantity = max(1, int(quantity))
-    current_units = cart_unit_count(chat_id)
-    if current_units + quantity > MAX_ITEMS_PER_ORDER:
+    if cart_unit_count(chat_id) + quantity > MAX_ITEMS_PER_ORDER:
         return None
-
-    rows = cart_items(chat_id)
-    position = len(rows) + 1
+    position = len(cart_items(chat_id)) + 1
     price = get_or_create_product_price(chat_id, product_name)
-
     conn = db()
     conn.execute(
         "INSERT INTO cart_items(chat_id,position,product_name,price,quantity) VALUES(?,?,?,?,?)",
@@ -348,84 +952,55 @@ def cart_subtotal(chat_id):
     return sum(int(r["price"]) * int(r["quantity"]) for r in cart_items(chat_id))
 
 def cart_total(chat_id):
-    rows = cart_items(chat_id)
-    if not rows:
-        return 0
-    return cart_subtotal(chat_id) + SHIPPING_FEE
+    return cart_subtotal(chat_id) + (SHIPPING_FEE if cart_items(chat_id) else 0)
 
 def cart_summary(chat_id):
     rows = cart_items(chat_id)
     if not rows:
         return "سبد سفارش خالیه."
-    lines = []
+    lines = ["🛍 سفارش تا اینجا:"]
     for r in rows:
         qty = int(r["quantity"])
         unit = int(r["price"])
-        line_total = qty * unit
         if qty == 1:
-            lines.append(f"{r['position']}. {r['product_name']} — حدود {fmt_price(unit)}")
+            lines.append(f"• {r['product_name']} — حدود {fmt_price(unit)}")
         else:
             lines.append(
-                f"{r['position']}. {r['product_name']} × {qty}\\n"
-                f"   هر عدد: حدود {fmt_price(unit)} | جمع: {fmt_price(line_total)}"
+                f"• {r['product_name']} × {qty} — هر عدد حدود {fmt_price(unit)} "
+                f"(جمع {fmt_price(unit * qty)})"
             )
-    lines.append(f"\\n💰 جمع حدودی: {fmt_price(cart_total(chat_id))}")
-    lines.append(f"📦 تعداد کل: {cart_unit_count(chat_id)} عدد")
-    return "\\n".join(lines)
+    lines.append("")
+    lines.append(f"جمع محصولات: {fmt_price(cart_subtotal(chat_id))}")
+    lines.append(f"پست پیشتاز: {fmt_price(SHIPPING_FEE)}")
+    lines.append(f"جمع کل: {fmt_price(cart_total(chat_id))}")
+    return "\n".join(lines)
 
 def parse_count(text):
-    trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
-    cleaned = text.translate(trans)
-    m = re.search(r"\d+", cleaned)
+    n = normalize_text(text)
+    m = re.search(r"\d+", n)
     return int(m.group()) if m else None
 
 def parse_quantity_product(text):
-    """Examples: '50 تا هودی اسپایدرمن', '۵ عدد دورس مشکی', '3 تا از هودی'."""
-    trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
-    cleaned = text.translate(trans).strip()
-    m = re.match(r"^\s*(\d+)\s*(?:تا|عدد|دونه|دانه)\s*(?:از\s+)?(.+?)\s*$", cleaned)
+    n = (text or "").translate(PERSIAN_DIGITS).strip()
+    m = re.match(r"^\s*(\d+)\s*(?:تا|عدد|دونه|دانه)\s*(?:از\s+)?(.+?)\s*$", n)
     if not m:
         return None, None
-    qty = int(m.group(1))
-    product = m.group(2).strip()
-    if not product:
-        return None, None
-    return qty, product
-
-def is_done_choice(text):
-    t = text.strip().lower()
-    done_words = [
-        "همین", "همینا", "همین ها", "همین‌ها", "همیناست", "تموم", "تمام",
-        "دیگه ندارم", "نه", "اوکی", "تایید", "تأیید", "بله"
-    ]
-    return any(w in t for w in done_words)
-
-def is_add_choice(text):
-    t = text.strip().lower()
-    add_words = ["اضافه", "بیشتر", "بازم", "باز هم", "یکی دیگه", "محصول دیگه"]
-    return any(w in t for w in add_words)
-
-
-def payment_text():
-    card = get_setting("card_number")
-    holder = get_setting("card_holder")
-    if not card or not holder:
-        return "اطلاعات کارت هنوز توسط فروشگاه تنظیم نشده. یک لحظه صبر کن تا برات بررسی بشه 🌹"
-    return (
-        f"💳 شماره کارت:\n{card}\n\n"
-        f"👤 به نام: {holder}\n\n"
-        "بعد از واریز لطفاً عکس رسید رو همینجا بفرست 📸"
-    )
-
-def contains_any(text, words):
-    t = text.lower()
-    return any(w in t for w in words)
+    return int(m.group(1)), m.group(2).strip()
 
 def extract_phone(text):
-    digits = re.sub(r"\D", "", text)
-    if 10 <= len(digits) <= 12:
+    n = (text or "").translate(PERSIAN_DIGITS)
+    digits = re.sub(r"\D", "", n)
+    if digits.startswith("98") and len(digits) == 12:
+        digits = "0" + digits[2:]
+    if re.fullmatch(r"09\d{9}", digits):
         return digits
     return ""
+
+def is_done_choice(text):
+    return fuzzy_any(text, ["همین ها", "همیناست", "تموم", "تمام", "دیگه ندارم", "نهایی", "همین"], 0.68)
+
+def is_add_choice(text):
+    return fuzzy_any(text, ["اضافه", "بیشتر", "بازم", "یکی دیگه", "محصول دیگه"], 0.68)
 
 def start_order(chat_id):
     clear_cart(chat_id)
@@ -440,26 +1015,36 @@ def start_order(chat_id):
         last_price=0,
         expected_items=0,
         collected_items=0,
-        misunderstood_count=0
+        misunderstood_count=0,
     )
 
+def payment_text():
+    card = get_setting("card_number")
+    holder = get_setting("card_holder")
+    if not card or not holder:
+        return "اطلاعات کارت هنوز کامل تنظیم نشده؛ لطفاً یک لحظه صبر کن تا فروشگاه بررسی کنه 🌹"
+    return (
+        f"💳 شماره کارت:\n{card}\n\n"
+        f"👤 به نام: {holder}\n\n"
+        "بعد از واریز، عکس رسید رو همینجا بفرست 📸"
+    )
 
 def create_order(chat_id):
     c = get_chat(chat_id)
     items = cart_items(chat_id)
-    total = sum(int(r["price"]) * int(r["quantity"]) for r in items) + (SHIPPING_FEE if items else 0)
+    total = cart_total(chat_id)
     product_summary = " | ".join(
-        f"{r['position']}. {r['product_name']} x{r['quantity']}" for r in items
+        f"{r['product_name']} x{r['quantity']}" for r in items
     )
     conn = db()
-    cur = conn.execute("""
-        INSERT INTO orders(chat_id,product,size,full_name,phone,address,price,created_at)
-        VALUES(?,?,?,?,?,?,?,?)
-    """, (
-        chat_id, product_summary, c["size"], c["full_name"],
-        c["phone"], c["address"], total,
-        datetime.now().isoformat(timespec="seconds")
-    ))
+    cur = conn.execute(
+        """INSERT INTO orders(chat_id,product,size,full_name,phone,address,price,created_at)
+           VALUES(?,?,?,?,?,?,?,?)""",
+        (
+            chat_id, product_summary, c["size"], c["full_name"], c["phone"],
+            c["address"], total, datetime.now().isoformat(timespec="seconds")
+        )
+    )
     order_id = cur.lastrowid
     for r in items:
         conn.execute(
@@ -471,15 +1056,106 @@ def create_order(chat_id):
     update_chat(chat_id, product=product_summary, last_price=total)
     return order_id
 
-
 def latest_waiting_order(chat_id):
     conn = db()
     row = conn.execute(
-        "SELECT * FROM orders WHERE chat_id=? AND status='awaiting_receipt' "
-        "ORDER BY id DESC LIMIT 1", (chat_id,)
+        "SELECT * FROM orders WHERE chat_id=? AND status='awaiting_receipt' ORDER BY id DESC LIMIT 1",
+        (chat_id,)
     ).fetchone()
     conn.close()
     return row
+
+# ------------------------------------------------------------
+# Intent answers
+# ------------------------------------------------------------
+
+def answer_intent(intent, text, chat_id):
+    if intent == "greeting":
+        return random.choice(GREETINGS)
+    if intent == "thanks":
+        return random.choice([
+            "قربونت 🌹 در خدمتم.",
+            "خواهش می‌کنم رفیق 🤝",
+            "فدات، هرچی خواستی بپرس 👌",
+            "اختیار داری عزیز 🌹",
+        ])
+    if intent == "bye":
+        return random.choice([
+            "قربونت، هر وقت خواستی پیام بده 🌹",
+            "فعلاً رفیق 👋 منتظرتیم.",
+            "روزت عالی، هر وقت سوال داشتی من هستم 👌",
+        ])
+    if intent == "shipping_method":
+        return random.choice(SHIPPING_METHOD_REPLIES)
+    if intent == "shipping_cost":
+        return random.choice(SHIPPING_COST_REPLIES)
+    if intent == "shipping_time":
+        return random.choice(SHIPPING_TIME_REPLIES)
+    if intent == "shipping_days":
+        return random.choice(SHIPPING_DAYS_REPLIES)
+    if intent == "late":
+        return random.choice(LATE_DELIVERY_REPLIES)
+    if intent == "low_price":
+        return random.choice(LOW_PRICE_REPLIES)
+    if intent == "price_difference":
+        return random.choice(PRICE_DIFF_REPLIES)
+    if intent == "payment":
+        return payment_text()
+    if intent == "stock":
+        return random.choice(STOCK_REPLIES)
+    if intent == "color":
+        return random.choice(COLOR_REPLIES)
+    if intent == "quality":
+        return random.choice(PRODUCT_QUALITY_REPLIES)
+    if intent == "original":
+        return (
+            "برای اصل/اورجینال بودن باید درباره همون محصول مشخص اطلاعات قطعی داشته باشیم. "
+            "اسم یا عکس مدل رو بفرست تا چیزی رو حدس نزنم 🌹"
+        )
+    if intent == "return":
+        return random.choice(RETURN_REPLIES)
+    if intent == "size":
+        ans, _ = size_answer(text)
+        return ans
+    if intent == "price":
+        product_hint = normalize_text(text)
+        # If customer clearly names a product, make the price stable for that customer.
+        generic = {"قیمت", "چنده", "چقدر", "تومان", "تومن", "این", "کار", "اینکار"}
+        tokens = [w for w in product_hint.split() if w not in generic and not w.isdigit()]
+        if len(tokens) >= 1:
+            product_name = " ".join(tokens)
+            price = get_or_create_product_price(chat_id, product_name)
+        else:
+            price = random_price()
+        return (
+            f"قیمت حدودی این کار {fmt_price(price)} هست 🌹 "
+            "قبل از پرداخت مبلغ نهایی تأیید می‌شه."
+        )
+    return None
+
+# ------------------------------------------------------------
+# Order form validation
+# ------------------------------------------------------------
+
+def valid_name(text):
+    n = normalize_text(text)
+    if len(n) < 3 or any(ch.isdigit() for ch in n):
+        return False
+    if detect_intent(n) in {"confused", "dont_know", "wait", "price", "shipping_cost", "shipping_time"}:
+        return False
+    return len(n.split()) >= 1
+
+def valid_address(text):
+    n = normalize_text(text)
+    if len(n) < 8:
+        return False
+    if detect_intent(n) in {"confused", "dont_know", "wait"}:
+        return False
+    return True
+
+# ------------------------------------------------------------
+# Admin
+# ------------------------------------------------------------
 
 def handle_admin_message(msg):
     chat_id = msg["chat"]["id"]
@@ -491,10 +1167,7 @@ def handle_admin_message(msg):
 
     if not ADMIN_ID or chat_id != ADMIN_ID:
         if text.startswith("/"):
-            api("sendMessage", {
-                "chat_id": chat_id,
-                "text": "این بخش فقط برای مدیر فروشگاه فعاله."
-            })
+            api("sendMessage", {"chat_id": chat_id, "text": "این بخش فقط برای مدیر فروشگاه فعاله."})
         return
 
     if text.startswith("/setcard"):
@@ -503,7 +1176,7 @@ def handle_admin_message(msg):
             send_admin("فرمت درست:\n/setcard 6037991234567890")
             return
         set_setting("card_number", card)
-        send_admin(f"✅ شماره کارت جدید ذخیره شد:\n{card}")
+        send_admin(f"✅ شماره کارت ذخیره شد:\n{card}")
         return
 
     if text.startswith("/setholder"):
@@ -522,8 +1195,7 @@ def handle_admin_message(msg):
     if text == "/orders":
         conn = db()
         rows = conn.execute(
-            "SELECT id,full_name,product,size,status,price FROM orders "
-            "ORDER BY id DESC LIMIT 10"
+            "SELECT id,full_name,product,size,status,price FROM orders ORDER BY id DESC LIMIT 10"
         ).fetchall()
         conn.close()
         if not rows:
@@ -533,53 +1205,48 @@ def handle_admin_message(msg):
         for r in rows:
             out.append(
                 f"\n#{r['id']} | {r['full_name'] or '-'}\n"
-                f"{r['product'] or '-'} | سایز {r['size'] or '-'}\n"
-                f"{fmt_price(r['price']) if r['price'] else 'قیمت ثبت نشده'} | {r['status']}"
+                f"{r['product'] or '-'}\n"
+                f"{fmt_price(r['price']) if r['price'] else '-'} | {r['status']}"
             )
         send_admin("\n".join(out))
         return
 
     if text.startswith("/pause"):
         raw = re.sub(r"\D", "", text.replace("/pause", "", 1))
-        if not raw:
-            send_admin("فرمت: /pause CHAT_ID")
-            return
-        update_chat(int(raw), paused=1)
-        send_admin(f"⏸ پاسخ خودکار برای چت {raw} متوقف شد.")
+        if raw:
+            update_chat(int(raw), paused=1)
+            send_admin(f"⏸ پاسخ خودکار چت {raw} متوقف شد.")
         return
 
     if text.startswith("/resume"):
         raw = re.sub(r"\D", "", text.replace("/resume", "", 1))
-        if not raw:
-            send_admin("فرمت: /resume CHAT_ID")
-            return
-        update_chat(int(raw), paused=0)
-        send_admin(f"▶️ پاسخ خودکار برای چت {raw} فعال شد.")
+        if raw:
+            update_chat(int(raw), paused=0)
+            send_admin(f"▶️ پاسخ خودکار چت {raw} فعال شد.")
         return
 
     if text.startswith("/resetprices"):
         raw = re.sub(r"\D", "", text.replace("/resetprices", "", 1))
-        if not raw:
-            send_admin("فرمت: /resetprices CHAT_ID")
-            return
-        conn = db()
-        conn.execute("DELETE FROM product_price_history WHERE chat_id=?", (int(raw),))
-        conn.commit()
-        conn.close()
-        send_admin(f"✅ قیمت‌های ذخیره‌شده برای مشتری {raw} پاک شد.")
+        if raw:
+            conn = db()
+            conn.execute("DELETE FROM product_price_history WHERE chat_id=?", (int(raw),))
+            conn.commit()
+            conn.close()
+            send_admin(f"✅ قیمت‌های ذخیره‌شده مشتری {raw} پاک شد.")
         return
 
     if text == "/admin":
         send_admin(
-            "⚙️ دستورات مدیریت:\n\n"
-            "/setcard شماره‌کارت\n"
+            "⚙️ دستورات:\n"
+            "/setcard شماره کارت\n"
             "/setholder نام صاحب کارت\n"
-            "/cardinfo\n"
-            "/orders\n"
-            "/pause CHAT_ID\n"
-            "/resume CHAT_ID\n"
-            "/resetprices CHAT_ID"
+            "/cardinfo\n/orders\n"
+            "/pause CHAT_ID\n/resume CHAT_ID\n/resetprices CHAT_ID"
         )
+
+# ------------------------------------------------------------
+# Customer conversation
+# ------------------------------------------------------------
 
 def handle_business_message(msg, business_owner_id=0):
     connection_id = msg.get("business_connection_id")
@@ -596,44 +1263,26 @@ def handle_business_message(msg, business_owner_id=0):
     if c and c["paused"]:
         return
 
-    text = (msg.get("text") or msg.get("caption") or "").strip()
     state = c["state"] if c else ""
+    text = (msg.get("text") or msg.get("caption") or "").strip()
 
-    if msg.get("photo") and state != "await_receipt":
-        if not state:
-            start_order(chat_id)
-        c = get_chat(chat_id)
-        if c["state"] == "await_product_count":
-            send_business(
-                connection_id, chat_id,
-                "عکس محصول رو گرفتم 👌 چند تا محصول می‌خوای سفارش بدی؟ "
-                "فقط تعداد کل رو با عدد بفرست؛ از ۱ تا ۵۰. بعد اسم‌هاشون رو یکی‌یکی ازت می‌پرسم."
-            )
-        elif c["state"] == "await_item_name":
-            current = int(c["collected_items"]) + 1
-            total_needed = int(c["expected_items"])
-            send_business(
-                connection_id, chat_id,
-                f"اسکرین‌شات رسید 👌 برای اینکه اشتباه نشه، اسم محصول شماره {current} از {total_needed} رو تایپ کن."
-            )
-        else:
-            send_business(
-                connection_id, chat_id,
-                "عکس رو گرفتم 👌 مراحل سفارش رو با متن ادامه بده تا دقیق ثبتش کنم."
-            )
-        return
+    # ----------------------- Photos -----------------------
+    if msg.get("photo"):
+        if state == "await_receipt":
+            order = latest_waiting_order(chat_id)
+            if not order:
+                send_business(connection_id, chat_id, "عکس رو گرفتم ولی سفارش منتظر رسید پیدا نکردم. اگه می‌خوای سفارش بدی بگو «ثبت سفارش».")
+                return
 
-    if msg.get("photo") and state == "await_receipt":
-        order = latest_waiting_order(chat_id)
-        if order:
             file_id = msg["photo"][-1]["file_id"]
             conn = db()
             conn.execute(
-                "UPDATE orders SET receipt_file_id=?, status='receipt_sent' WHERE id=?",
+                "UPDATE orders SET receipt_file_id=?,status='receipt_sent' WHERE id=?",
                 (file_id, order["id"])
             )
-            item_rows = conn.execute(
-                "SELECT position,product_name,price,COALESCE(quantity,1) AS quantity FROM order_items WHERE order_id=? ORDER BY position",
+            rows = conn.execute(
+                "SELECT position,product_name,price,COALESCE(quantity,1) quantity "
+                "FROM order_items WHERE order_id=? ORDER BY position",
                 (order["id"],)
             ).fetchall()
             conn.commit()
@@ -641,365 +1290,404 @@ def handle_business_message(msg, business_owner_id=0):
 
             send_business(
                 connection_id, chat_id,
-                f"✅ رسید سفارش #{order['id']} دریافت شد و برای بررسی فروشگاه فرستادم 🌹"
+                f"رسید سفارش #{order['id']} رسید ✅ برای بررسی فروشگاه فرستادم. ممنونت 🌹"
             )
-
-            items_text = "\n".join(
-                (
-                    f"{r['position']}. {r['product_name']} × {r['quantity']} — "
-                    f"{fmt_price(int(r['price']) * int(r['quantity']))}"
-                )
-                for r in item_rows
+            items = "\n".join(
+                f"{r['product_name']} × {r['quantity']} — {fmt_price(int(r['price'])*int(r['quantity']))}"
+                for r in rows
             )
             caption = (
-                f"📸 رسید سفارش #{order['id']}\n\n"
-                f"{items_text}\n\n"
-                f"📏 سایزها: {order['size']}\n"
-                f"👤 نام: {order['full_name']}\n"
-                f"📱 موبایل: {order['phone']}\n"
-                f"📍 آدرس: {order['address']}\n"
-                f"💰 جمع حدودی ثبت‌شده: {fmt_price(order['price']) if order['price'] else '-'}\n"
-                f"💬 Chat ID: {chat_id}"
+                f"📸 رسید سفارش #{order['id']}\n\n{items}\n\n"
+                f"سایز: {order['size']}\nنام: {order['full_name']}\n"
+                f"موبایل: {order['phone']}\nآدرس: {order['address']}\n"
+                f"جمع کل: {fmt_price(order['price'])}\nChat ID: {chat_id}"
             )
             send_admin_photo(file_id, caption)
             return
 
-        send_business(connection_id, chat_id, "رسید رو گرفتم، ولی سفارش فعالی پیدا نکردم. دوباره بگو «ثبت سفارش».")
+        # Product screenshot/photo
+        if not state:
+            start_order(chat_id)
+            state = "await_product_count"
+        if state == "await_product_count":
+            send_business(
+                connection_id, chat_id,
+                "عکس رو گرفتم 👌 اگه چند محصول توی عکس‌ها داری، تعداد کل رو بگو؛ از ۱ تا ۵۰. بعد اسم هرکدوم رو یکی‌یکی ازت می‌گیرم که اشتباه نشه."
+            )
+        elif state == "await_item_name":
+            c = get_chat(chat_id)
+            current = int(c["collected_items"] or 0) + 1
+            expected = int(c["expected_items"] or 1)
+            send_business(
+                connection_id, chat_id,
+                f"عکس رسید 👌 برای اینکه مدل رو اشتباه حدس نزنم، اسم محصول شماره {current} از {expected} رو هم برام بنویس."
+            )
+        else:
+            send_business(connection_id, chat_id, "عکس رو گرفتم 👌 اگه درباره همین محصول سوال داری با یه جمله بپرس.")
         return
 
     if not text:
         return
 
+    intent = detect_intent(text)
+    smart_categories = detect_categories(text, limit=8)
+    core_intents = detect_core_intents(text)
+
+    # Several questions in one message: answer up to three without losing checkout state.
+    multi = multi_question_answer(text, chat_id)
+    if multi and state not in {"await_product_count", "await_item_name", "await_add_count", "await_size", "await_height_weight"}:
+        resume = resume_prompt(state, chat_id) if state else ""
+        send_business(connection_id, chat_id, multi + (f"\n\n{resume}" if resume else ""))
+        return
+
+    # ------------------ Universal conversation interrupts ------------------
+    # These always run before form fields, so "وایسا" never gets saved as a name,
+    # and "چی میگی" never gets treated as a phone/address.
+    if intent == "wait":
+        send_business(connection_id, chat_id, random.choice(WAIT_REPLIES))
+        return
+
+    if intent == "confused":
+        send_business(connection_id, chat_id, compose(state_explanation(state), close=False))
+        return
+
+    if intent == "dont_know":
+        if state == "await_size":
+            update_chat(chat_id, state="await_height_weight")
+            send_business(
+                connection_id, chat_id,
+                "اشکالی نداره 😄 سایز رو خودم حدودی راهنماییت می‌کنم. قد و وزنت رو بفرست؛ مثلاً «قد 180 وزن 80». اگه لباس رو آزاد دوست داری اونم بگو."
+            )
+        elif state == "await_height_weight":
+            send_business(connection_id, chat_id, "اگه قد و وزنت رو هم نمی‌دونی، سایزی که معمولاً توی تیشرت یا هودی می‌پوشی رو بگو؛ مثلاً L یا XL.")
+        elif state:
+            send_business(connection_id, chat_id, compose(state_explanation(state), close=False))
+        else:
+            send_business(connection_id, chat_id, random.choice(DONT_KNOW_GENERIC))
+        return
+
+    # Let customer ask normal shop questions in the middle of checkout.
+    # Answer first, then gently return to the exact unfinished step.
+    global_intents = {
+        "shipping_method", "shipping_cost", "shipping_time", "shipping_days",
+        "late", "low_price", "price_difference", "payment", "stock", "color",
+        "quality", "original", "return"
+    }
+    if intent in global_intents:
+        product_entry_states = {"await_product_count", "await_item_name", "await_add_count"}
+        # A bare product name such as "تیشرت سفید" or "هودی مشکی" must be
+        # saved as a product, not mistaken for a color/quality question.
+        if state not in product_entry_states or looks_like_question(text):
+            answer = answer_intent(intent, text, chat_id)
+            resume = resume_prompt(state, chat_id) if state else ""
+            send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
+            return
+
+    # Size question can also interrupt most form states, except when the size answer
+    # itself is currently expected.
+    if intent == "size" and state not in {"await_size", "await_height_weight"}:
+        product_entry_states = {"await_product_count", "await_item_name", "await_add_count"}
+        if state not in product_entry_states or looks_like_question(text):
+            answer, _ = size_answer(text)
+            resume = resume_prompt(state, chat_id) if state else ""
+            send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
+            return
+
+    # Long-tail customer question during personal/payment form steps.
+    # We answer it, keep the state untouched, then remind the exact unfinished field.
+    if smart_categories and state in {"confirm_cart", "await_name", "await_phone", "await_address", "await_receipt"}:
+        cat = next((c for c in smart_categories if c in QUESTIONISH), None)
+        if cat:
+            answer = answer_category(cat, text, chat_id)
+            resume = resume_prompt(state, chat_id)
+            send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
+            return
+
+    # ----------------------- Order states -----------------------
     if state == "await_product_count":
         qty, product = parse_quantity_product(text)
         if qty is not None and product:
-            if qty < 1 or qty > MAX_ITEMS_PER_ORDER:
-                send_business(connection_id, chat_id, "تعداد باید بین ۱ تا ۵۰ عدد باشه.")
+            if not 1 <= qty <= MAX_ITEMS_PER_ORDER:
+                send_business(connection_id, chat_id, "تعداد باید بین ۱ تا ۵۰ باشه عزیز.")
                 return
             clear_cart(chat_id)
             result = add_cart_item(chat_id, product, qty)
-            if not result:
-                send_business(connection_id, chat_id, "حداکثر ۵۰ عدد محصول در هر سفارش قابل ثبت هست.")
-                return
             position, price, quantity = result
             update_chat(chat_id, expected_items=1, collected_items=1, state="confirm_cart")
             send_business(
                 connection_id, chat_id,
-                f"✅ {quantity} عدد {product}\n"
-                f"💰 قیمت ثابت هر عدد برای این محصول: {fmt_price(price)}\n"
-                f"💰 جمع این محصول: {fmt_price(price * quantity)}\n\n"
-                + cart_summary(chat_id) +
-                "\n\nهمین محصول رو می‌خوای یا محصول دیگه‌ای هم اضافه کنم؟ "
-                "بنویس «همین‌ها» یا «اضافه»."
+                f"اوکی 👌 {quantity} عدد «{product}» ثبت شد.\n"
+                f"هر عدد حدود {fmt_price(price)}؛ جمع این مدل {fmt_price(price*quantity)}.\n\n"
+                f"{cart_summary(chat_id)}\n\n"
+                "همین رو می‌خوای یا محصول دیگه‌ای هم اضافه کنیم؟"
             )
             return
 
         count = parse_count(text)
         if count is None:
+            if intent == "order":
+                send_business(connection_id, chat_id, "آره حتماً 😄 فقط بگو چند محصول می‌خوای؛ مثلاً «3».")
+                return
             send_business(
                 connection_id, chat_id,
-                "تعداد محصولات رو با عدد بفرست؛ مثلاً 3.\n"
-                "اگه چند عدد از یک مدل می‌خوای می‌تونی بنویسی: «۵۰ تا هودی اسپایدرمن»."
+                "تعداد رو نگرفتم 😄 فقط یه عدد بین ۱ تا ۵۰ بفرست. مثلاً «3». اگه ۵ تا از یک مدل می‌خوای هم می‌تونی بنویسی «5 تا هودی مشکی»."
             )
             return
-        if count < 1:
-            send_business(connection_id, chat_id, "تعداد باید حداقل ۱ محصول باشه.")
-            return
-        if count > MAX_ITEMS_PER_ORDER:
-            send_business(connection_id, chat_id, "حداکثر می‌تونم ۵۰ محصول رو در یک سفارش ثبت کنم. یک عدد بین ۱ تا ۵۰ بفرست 🌹")
+        if not 1 <= count <= MAX_ITEMS_PER_ORDER:
+            send_business(connection_id, chat_id, "حداکثر ۵۰ محصول توی هر سفارش می‌تونم ثبت کنم. یه عدد بین ۱ تا ۵۰ بفرست 🌹")
             return
         clear_cart(chat_id)
         update_chat(chat_id, expected_items=count, collected_items=0, state="await_item_name")
-        send_business(
-            connection_id, chat_id,
-            f"عالی 👌 {count} محصول. اسم محصول شماره ۱ از {count} رو بفرست. "
-            "اگه از همین مدل چند عدد می‌خوای، مثل «3 تا هودی مشکی» بنویس."
-        )
+        send_business(connection_id, chat_id, f"اوکی 👌 {count} محصول. اسم محصول اول رو بفرست.")
         return
 
     if state == "await_item_name":
-        c = get_chat(chat_id)
-        if int(c["collected_items"]) >= MAX_ITEMS_PER_ORDER:
-            update_chat(chat_id, state="confirm_cart", expected_items=MAX_ITEMS_PER_ORDER)
-            send_business(
-                connection_id, chat_id,
-                "به سقف ۵۰ محصول رسیدیم ✅\n\n" + cart_summary(chat_id) +
-                "\n\nاگه همین‌هاست بنویس «همین‌ها» تا ادامه ثبت سفارش رو انجام بدیم."
-            )
+        # A pure generic intent should not be saved as a product name.
+        if intent in {"greeting", "thanks", "bye", "order"}:
+            ans = answer_intent(intent, text, chat_id)
+            send_business(connection_id, chat_id, ans + "\n\n" + resume_prompt(state, chat_id))
             return
 
         qty, product = parse_quantity_product(text)
         if qty is None:
             qty, product = 1, text.strip()
-
-        remaining_units = MAX_ITEMS_PER_ORDER - cart_unit_count(chat_id)
-        if qty < 1 or qty > remaining_units:
-            send_business(
-                connection_id, chat_id,
-                f"با سفارش فعلی حداکثر {remaining_units} عدد دیگه می‌تونی اضافه کنی."
-            )
+        remaining = MAX_ITEMS_PER_ORDER - cart_unit_count(chat_id)
+        if qty < 1 or qty > remaining:
+            send_business(connection_id, chat_id, f"با سفارش فعلی حداکثر {remaining} عدد دیگه جا داریم.")
             return
-
         result = add_cart_item(chat_id, product, qty)
         if not result:
-            send_business(connection_id, chat_id, "حداکثر ۵۰ عدد محصول در هر سفارش قابل ثبت هست.")
+            send_business(connection_id, chat_id, "سقف سفارش ۵۰ عدده عزیز.")
             return
-
         position, price, quantity = result
-        c = get_chat(chat_id)
-        expected = int(c["expected_items"])
-        collected = int(c["collected_items"])
 
-        reused = " (همون قیمت قبلی این محصول ✅)" if quantity >= 1 else ""
+        c = get_chat(chat_id)
+        expected = int(c["expected_items"] or 1)
+        collected = int(c["collected_items"] or 0)
+
         if quantity == 1:
-            item_text = (
-                f"✅ محصول {position}: {product}\n"
-                f"💰 قیمت حدودی ثابت: {fmt_price(price)}{reused}"
-            )
+            msg_text = f"گرفتم 👌 «{product}» — حدود {fmt_price(price)}."
         else:
-            item_text = (
-                f"✅ محصول {position}: {product} × {quantity}\n"
-                f"💰 هر عدد: {fmt_price(price)}{reused}\n"
-                f"💰 جمع این محصول: {fmt_price(price * quantity)}"
-            )
-        send_business(connection_id, chat_id, item_text)
+            msg_text = f"گرفتم 👌 «{product}» × {quantity} — هر عدد حدود {fmt_price(price)}؛ جمع {fmt_price(price*quantity)}."
 
         if collected < expected:
-            send_business(
-                connection_id, chat_id,
-                f"حالا اسم محصول شماره {collected + 1} از {expected} رو بفرست."
-            )
-            return
-
-        update_chat(chat_id, state="confirm_cart")
-        send_business(
-            connection_id, chat_id,
-            "این محصولات ثبت شدن:\n\n" + cart_summary(chat_id) +
-            "\n\nهمین محصولات رو می‌خوای یا محصول دیگه‌ای هم اضافه کنم؟ "
-            "بنویس «همین‌ها» یا «اضافه»."
-        )
+            msg_text += f"\nاسم محصول بعدی رو بفرست ({collected+1} از {expected})."
+        else:
+            update_chat(chat_id, state="confirm_cart")
+            msg_text += "\n\n" + cart_summary(chat_id) + "\n\nهمین‌ها نهایی بشن یا چیزی اضافه کنیم؟"
+        send_business(connection_id, chat_id, msg_text)
         return
 
     if state == "confirm_cart":
-        rows = cart_items(chat_id)
-        current_count = cart_unit_count(chat_id)
-
         if is_add_choice(text):
-            if current_count >= MAX_ITEMS_PER_ORDER:
+            current = cart_unit_count(chat_id)
+            if current >= MAX_ITEMS_PER_ORDER:
                 update_chat(chat_id, state="await_size")
-                send_business(
-                    connection_id, chat_id,
-                    "به سقف ۵۰ محصول رسیدیم و امکان اضافه‌کردن بیشتر نیست.\n\n"
-                    + cart_summary(chat_id) +
-                    "\n\nحالا سایز هر محصول رو به ترتیب بنویس؛ مثلاً:\n1: L\n2: XL\n3: L"
-                )
-                return
-            update_chat(chat_id, state="await_add_count")
+                send_business(connection_id, chat_id, "به سقف ۵۰ عدد رسیدیم 👌 حالا سایزها رو بگو. اگر نمی‌دونی بنویس «نمیدونم».")
+            else:
+                update_chat(chat_id, state="await_add_count")
+                send_business(connection_id, chat_id, f"حتماً. چند محصول دیگه اضافه کنیم؟ حداکثر {MAX_ITEMS_PER_ORDER-current} عدد.")
+            return
+
+        if is_done_choice(text) or fuzzy_any(text, ["آره همینا", "همینا خوبه", "نهایی کن"], 0.65):
+            update_chat(chat_id, state="await_size", last_price=cart_total(chat_id))
             send_business(
                 connection_id, chat_id,
-                f"حتماً 👌 الان {current_count} محصول داری. چند محصول دیگه اضافه کنم؟ "
-                f"حداکثر {MAX_ITEMS_PER_ORDER - current_count} تا."
+                f"عالی، اینا نهایی شدن ✅\n\n{cart_summary(chat_id)}\n\n"
+                "حالا سایز محصول‌ها رو بگو. مثلاً «هودی XL، تیشرت L». اگر سایزت رو نمی‌دونی فقط بگو «نمیدونم»."
             )
             return
 
-        if is_done_choice(text):
-            total = cart_total(chat_id)
-            update_chat(chat_id, last_price=total, state="await_size")
-            send_business(
-                connection_id, chat_id,
-                "باشه ✅ سفارش محصولاتت تا اینجا:\n\n" + cart_summary(chat_id) +
-                "\n\nحالا سایز هر محصول رو به ترتیب بنویس؛ مثلاً:\n1: L\n2: XL\n3: L\n\n"
-                "این قیمت‌ها حدودی هستن و قبل از پرداخت باید مبلغ نهایی تأیید بشه."
-            )
-            return
-
-        send_business(
-            connection_id, chat_id,
-            "اگه همین محصولات رو می‌خوای بنویس «همین‌ها». "
-            "اگه محصول دیگه هم داری بنویس «اضافه»."
-        )
+        send_business(connection_id, chat_id, "فقط بگو «همین‌ها» یا «اضافه» 😄")
         return
 
     if state == "await_add_count":
-        current_count = cart_unit_count(chat_id)
-        remaining = MAX_ITEMS_PER_ORDER - current_count
         count = parse_count(text)
+        current_units = cart_unit_count(chat_id)
+        remaining = MAX_ITEMS_PER_ORDER - current_units
         if count is None:
-            send_business(connection_id, chat_id, f"تعداد محصولات جدید رو با عدد بفرست؛ حداکثر {remaining}.")
+            send_business(connection_id, chat_id, f"فقط تعداد محصول جدید رو با عدد بگو؛ حداکثر {remaining}.")
             return
-        if count < 1:
-            send_business(connection_id, chat_id, "تعداد باید حداقل ۱ باشه.")
-            return
-        if count > remaining:
-            send_business(
-                connection_id, chat_id,
-                f"با سفارش فعلی فقط {remaining} محصول دیگه می‌تونم اضافه کنم؛ سقف هر سفارش ۵۰ محصوله."
-            )
+        if not 1 <= count <= remaining:
+            send_business(connection_id, chat_id, f"الان حداکثر {remaining} عدد دیگه می‌تونی اضافه کنی.")
             return
         existing_lines = len(cart_items(chat_id))
         new_expected = existing_lines + count
         update_chat(chat_id, expected_items=new_expected, collected_items=existing_lines, state="await_item_name")
-        send_business(
-            connection_id, chat_id,
-            f"اوکی 👌 اسم محصول شماره {existing_lines + 1} از {new_expected} رو بفرست. "
-            "اگر چند عدد از یک مدل می‌خوای، مثلاً بنویس «5 تا دورس مشکی»."
-        )
+        send_business(connection_id, chat_id, "اوکی 👌 اسم محصول بعدی رو بفرست.")
         return
 
     if state == "await_size":
-        update_chat(chat_id, size=text, state="await_name")
-        send_business(connection_id, chat_id, "اسم و فامیلی تحویل‌گیرنده رو بفرست 🌹")
+        # If height/weight was supplied, make recommendation and remember it.
+        h, w = extract_height_weight(text)
+        if h and w:
+            ans, rec = size_answer(text)
+            if rec:
+                update_chat(chat_id, size=rec, state="await_name")
+                send_business(
+                    connection_id, chat_id,
+                    ans + f"\n\nمن فعلاً {rec} رو برای سفارشت ثبت کردم. اگه اوکیه، اسم و فامیلی تحویل‌گیرنده رو بفرست."
+                )
+            else:
+                send_business(connection_id, chat_id, ans)
+            return
+
+        # Accept normal explicit sizes.
+        n = normalize_text(text).upper()
+        if re.search(r"\b(?:S|M|L|XL|XXL|2XL|3XL|4XL)\b", n):
+            update_chat(chat_id, size=text.strip(), state="await_name")
+            send_business(connection_id, chat_id, "گرفتم 👌 حالا اسم و فامیلی تحویل‌گیرنده رو بفرست.")
+            return
+
+        # Natural phrases like "لارج" or "ایکس لارج"
+        size_words = {
+            "مدیوم": "M", "لارج": "L", "ایکس لارج": "XL",
+            "دو ایکس": "2XL", "سه ایکس": "3XL",
+        }
+        for phrase, code in size_words.items():
+            if fuzzy_any(text, [phrase], 0.68):
+                update_chat(chat_id, size=code, state="await_name")
+                send_business(connection_id, chat_id, f"اوکی، {code} ثبت شد 👌 حالا اسم و فامیلی تحویل‌گیرنده رو بفرست.")
+                return
+
+        send_business(
+            connection_id, chat_id,
+            "سایز رو دقیق نگرفتم 😄 اگر می‌دونی مثلاً بنویس «XL». اگر نمی‌دونی بگو «نمیدونم» تا با قد و وزن راهنماییت کنم."
+        )
+        return
+
+    if state == "await_height_weight":
+        ans, rec = size_answer(text)
+        if rec:
+            update_chat(chat_id, size=rec, state="await_name")
+            send_business(
+                connection_id, chat_id,
+                ans + f"\n\nفعلاً {rec} رو ثبت کردم. اگه همین خوبه، اسم و فامیلی تحویل‌گیرنده رو بفرست."
+            )
+        else:
+            send_business(connection_id, chat_id, ans)
         return
 
     if state == "await_name":
-        update_chat(chat_id, full_name=text, state="await_phone")
-        send_business(connection_id, chat_id, "شماره موبایل رو بفرست؛ مثلاً 09123456789.")
+        if not valid_name(text):
+            send_business(
+                connection_id, chat_id,
+                "این رو به‌عنوان اسم مطمئن نشدم 😄 اسم و فامیلی کسی که بسته رو تحویل می‌گیره رو بفرست؛ مثلاً «علی رضایی»."
+            )
+            return
+        update_chat(chat_id, full_name=text.strip(), state="await_phone")
+        send_business(
+            connection_id, chat_id,
+            f"مرسی {text.strip()} 🌹 حالا شماره موبایل گیرنده رو بفرست؛ مثل 09123456789."
+        )
         return
 
     if state == "await_phone":
         phone = extract_phone(text)
         if not phone:
-            send_business(connection_id, chat_id, "شماره موبایل درست به نظر نمی‌رسه؛ دوباره بفرست لطفاً.")
+            send_business(
+                connection_id, chat_id,
+                "این شماره موبایل نبود 😄 شماره باید ۱۱ رقم و با 09 شروع بشه؛ مثلاً 09123456789. اگه منظورت چیز دیگه‌ای بود بگو."
+            )
             return
         update_chat(chat_id, phone=phone, state="await_address")
-        send_business(connection_id, chat_id, "آدرس کامل ارسال رو بفرست؛ شهر، خیابون، پلاک و اگر داری کدپستی.")
+        send_business(
+            connection_id, chat_id,
+            "گرفتم 👌 حالا آدرس ارسال رو بفرست؛ شهر، خیابون و پلاک. کدپستی هم اگه داری اضافه کن."
+        )
         return
 
     if state == "await_address":
-        update_chat(chat_id, address=text, state="await_receipt")
+        if not valid_address(text):
+            send_business(
+                connection_id, chat_id,
+                "این برای آدرس خیلی کوتاهه 😄 لطفاً حداقل شهر + خیابون + پلاک رو بنویس. مثلاً «تهران، ولیعصر، کوچه ... پلاک ...»."
+            )
+            return
+        update_chat(chat_id, address=text.strip(), state="await_receipt")
         order_id = create_order(chat_id)
         c = get_chat(chat_id)
-        items_text = cart_summary(chat_id)
+
         summary = (
-            f"✅ سفارش #{order_id} ثبت اولیه شد.\n\n"
-            f"{items_text}\n\n"
-            f"📏 سایزها: {c['size']}\n"
-            f"👤 نام: {c['full_name']}\n"
-            f"📱 موبایل: {c['phone']}\n"
-            f"📍 آدرس: {c['address']}\n\n"
-            "⚠️ جمع بالا حدودی است؛ قبل از پرداخت مبلغ نهایی باید توسط فروشگاه تأیید شود.\n\n"
+            f"تمام شد ✅ سفارش #{order_id} ثبت شد.\n\n"
+            f"{cart_summary(chat_id)}\n\n"
+            f"سایز: {c['size']}\n"
+            f"نام گیرنده: {c['full_name']}\n"
+            f"موبایل: {c['phone']}\n"
+            f"آدرس: {c['address']}\n\n"
+            "ارسال فقط با پست پیشتازه؛ آماده‌سازی معمولاً ۳ تا ۵ روز کاری و زمان معمول رسیدن مرسوله حدود ۸ تا ۱۲ روزه.\n\n"
             + payment_text()
         )
         send_business(connection_id, chat_id, summary)
 
         admin_items = "\n".join(
-            f"{r['position']}. {r['product_name']} — {fmt_price(r['price'])}"
+            f"{r['product_name']} × {r['quantity']} — {fmt_price(int(r['price'])*int(r['quantity']))}"
             for r in cart_items(chat_id)
         )
         send_admin(
-            f"🆕 سفارش اولیه #{order_id}\n\n"
-            f"{admin_items}\n\n"
-            f"جمع حدودی: {fmt_price(c['last_price'])}\n"
-            f"سایزها: {c['size']}\n"
-            f"نام: {c['full_name']}\n"
-            f"موبایل: {c['phone']}\n"
-            f"آدرس: {c['address']}\n"
-            f"Chat ID: {chat_id}\n\n"
-            f"برای توقف پاسخ خودکار این چت:\n/pause {chat_id}"
+            f"🆕 سفارش #{order_id}\n\n{admin_items}\n\n"
+            f"جمع کل: {fmt_price(c['last_price'])}\n"
+            f"سایز: {c['size']}\nنام: {c['full_name']}\n"
+            f"موبایل: {c['phone']}\nآدرس: {c['address']}\n"
+            f"Chat ID: {chat_id}\n\n/pause {chat_id}"
         )
         return
 
-    # Shipping and delivery questions
-    low = text.lower()
-
-    if contains_any(low, SHIPPING_CHEAP_WORDS):
-        update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, random.choice(SHIPPING_CHEAP_REPLIES))
+    if state == "await_receipt":
+        # Still allow normal questions; if message is just chatter, remind about receipt.
+        if intent:
+            ans = answer_intent(intent, text, chat_id)
+            if ans:
+                send_business(connection_id, chat_id, ans + "\n\nهر وقت واریز کردی، عکس رسید رو بفرست 🌹")
+                return
+        send_business(connection_id, chat_id, "پیامت رو گرفتم 👌 اگر واریز انجام شده، عکس رسید رو همینجا بفرست. اگر سوالی داری هم راحت بپرس.")
         return
 
-    if contains_any(low, SHIPPING_METHOD_WORDS):
-        update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, random.choice(SHIPPING_METHOD_REPLIES))
-        return
-
-    if contains_any(low, SHIPPING_COST_WORDS):
-        update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, random.choice(SHIPPING_COST_REPLIES))
-        return
-
-    if contains_any(low, LATE_WORDS):
-        update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, random.choice(LATE_DELIVERY_REPLIES))
-        return
-
-    if contains_any(low, SHIPPING_DAYS_WORDS):
-        update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, random.choice(SHIPPING_DAYS_REPLIES))
-        return
-
-    if contains_any(low, SHIPPING_TIME_WORDS):
-        update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, random.choice(SHIPPING_TIME_REPLIES))
-        return
-
-    if contains_any(low, LOW_PRICE_WORDS):
-        update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, random.choice(LOW_PRICE_REPLIES))
-        return
-
-    if contains_any(text, PRICE_DIFF_WORDS) and contains_any(text, PRICE_WORDS):
-        send_business(connection_id, chat_id, random.choice(PRICE_DIFF_REPLIES))
-        return
-
-    if contains_any(text, ORDER_TRIGGERS):
-        update_chat(chat_id, misunderstood_count=0)
+    # ----------------------- No active order -----------------------
+    if intent == "order":
         start_order(chat_id)
         send_business(
             connection_id, chat_id,
-            "حتماً 🌹 چند تا محصول می‌خوای سفارش بدی؟ "
-            "فقط تعداد رو با عدد بفرست؛ از ۱ تا ۵۰. بعد اسم هر محصول رو یکی‌یکی ازت می‌پرسم."
+            "حتماً 😄 چند محصول می‌خوای؟ از ۱ تا ۵۰. فقط تعداد رو بگو؛ بعد اسم‌ها رو یکی‌یکی می‌گیریم."
         )
         return
 
-    if contains_any(text, PAY_WORDS):
+    if intent:
+        ans = answer_intent(intent, text, chat_id)
+        if ans:
+            update_chat(chat_id, misunderstood_count=0)
+            send_business(connection_id, chat_id, ans)
+            return
+
+    if smart_categories:
+        cat = smart_categories[0]
         update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, payment_text())
+        send_business(connection_id, chat_id, answer_category(cat, text, chat_id))
         return
 
-    if contains_any(text, SIZE_WORDS):
-        update_chat(chat_id, misunderstood_count=0)
-        send_business(
-            connection_id, chat_id,
-            random.choice([
-                "برای اینکه سایز دقیق‌تر بگم، قد و وزنت رو بفرست و بگو لباس رو جذب دوست داری یا آزاد 👌",
-                "قد، وزن و مدل لباس رو بفرست؛ مثلاً «قد ۱۸۰، وزن ۸۰، هودی». بعد راهنماییت می‌کنم 🌹",
-                "سایز رو با قد و وزن بهتر می‌تونم پیشنهاد بدم. قد و وزنت رو بفرست و بگو فیت آزاد می‌خوای یا معمولی."
-            ])
-        )
-        return
-
-    if contains_any(text, PRICE_WORDS):
-        update_chat(chat_id, misunderstood_count=0)
-        price = random_price()
-        update_chat(chat_id, last_price=price)
-        intro = random.choice(PRICE_INTROS)
-        send_business(
-            connection_id, chat_id,
-            f"{intro} حدود {fmt_price(price)} هست 🌹\n"
-            "این مبلغ تقریبیه؛ قبل از پرداخت قیمت قطعی رو تأیید می‌کنم."
-        )
-        return
-
-    if text.lower() in ["سلام", "سلامم", "hi", "hello", "درود"]:
-        update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, random.choice(GREETINGS))
-        return
-
+    # Unknown: ask for clarification without pretending to understand.
     c = get_chat(chat_id)
     miss = int(c["misunderstood_count"] or 0) + 1
+    update_chat(chat_id, misunderstood_count=miss)
     if miss >= 3:
         update_chat(chat_id, misunderstood_count=0)
-        send_business(connection_id, chat_id, "بله درسته ✅")
+        send_business(
+            connection_id, chat_id,
+            "هنوز دقیق منظورت رو نگرفتم 😅 برای اینکه جواب اشتباه ندم، یکی از اینا رو بگو: قیمت، سایز، موجودی، ارسال، پرداخت یا ثبت سفارش."
+        )
     else:
-        update_chat(chat_id, misunderstood_count=miss)
-        send_business(connection_id, chat_id, random.choice(UNKNOWN_REPLIES))
+        pool = RESPONSES.get("unclear") or RESPONSES.get("confused") or UNKNOWN_REPLIES
+        send_business(connection_id, chat_id, random.choice(pool))
 
+# ------------------------------------------------------------
+# Main polling loop
+# ------------------------------------------------------------
 
 def main():
     init_db()
     offset = 0
     business_owner_id = int(get_setting("business_owner_id", "0") or "0")
-    print("Telegram Business Shop Bot v2 is running...", flush=True)
+    print("Telegram Business Shop Bot v9 is running...", flush=True)
 
     while True:
         try:
@@ -1009,8 +1697,8 @@ def main():
                 "allowed_updates": json.dumps([
                     "business_connection",
                     "business_message",
-                    "message"
-                ])
+                    "message",
+                ]),
             })
 
             for update in updates:
@@ -1026,7 +1714,7 @@ def main():
                     print(
                         f"Business connection: id={bc.get('id')} "
                         f"enabled={bc.get('is_enabled')} owner={uid}",
-                        flush=True
+                        flush=True,
                     )
 
                 if "message" in update:
@@ -1035,7 +1723,7 @@ def main():
                 if "business_message" in update:
                     handle_business_message(
                         update["business_message"],
-                        business_owner_id=business_owner_id
+                        business_owner_id=business_owner_id,
                     )
 
         except requests.RequestException as e:
