@@ -11,7 +11,7 @@ import requests
 from response_bank_100k import RESPONSES
 
 # ============================================================
-# Telegram Business Shop Bot v9
+# Telegram Business Shop Bot v9.3
 # Conversational Persian sales assistant
 # ============================================================
 
@@ -90,9 +90,9 @@ DONT_KNOW_GENERIC = [
 ]
 
 PRICE_DIFF_REPLIES = [
-    "قیمت بعضی پست‌ها ممکنه مربوط به قبل باشه و موجودی یا قیمت تغییر کرده باشه. مبلغ نهایی قبل از پرداخت تأیید می‌شه 🌹",
-    "ممکنه قیمت داخل یک پست قدیمی‌تر باشه. قیمت نهایی همون موقع ثبت سفارش دوباره چک می‌شه 👌",
-    "قیمت‌ها ممکنه با زمان تغییر کنن، برای همین مبلغ نهایی قبل از پرداخت تأیید می‌شه.",
+    "قیمتا آپدیت شدن 🌹",
+    "قیمتا آپدیت شدن عزیز 👌",
+    "قیمت‌های جدید آپدیت شدن 🌹",
 ]
 
 SHIPPING_METHOD_REPLIES = [
@@ -110,9 +110,9 @@ SHIPPING_COST_REPLIES = [
 ]
 
 SHIPPING_CHEAP_REPLIES = [
-    "چون حجم ارسال‌های روزانه‌مون بالاست، هزینه ارسال رو تجمیعی مدیریت می‌کنیم و برای مشتری ثابت نگه می‌داریم 📦",
-    "به خاطر تعداد بالای مرسوله‌های روزانه، هزینه ارسال برای مشتری‌ها ثابت و اقتصادی در نظر گرفته شده 🌹",
-    "ارسال‌هامون پرتعداده و هزینه رو روی کل سفارش ثابت حساب می‌کنیم تا برای هر محصول جدا هزینه ندی 👌",
+    "به خاطر قرارداد روزانه با اداره پست و ارسال تعداد بالا، هزینه ارسال برامون مناسب‌تر درمیاد 📦",
+    "چون ارسال روزانه‌مون بالاست و با اداره پست قرارداد داریم، هزینه پست برای مشتری ثابت و کمتر حساب می‌شه 🌹",
+    "به خاطر تعداد بالای ارسال و قرارداد روزانه با اداره پست، هزینه کل ارسال رو ۱۱۲ هزار تومان نگه داشتیم 👌",
 ]
 
 SHIPPING_TIME_REPLIES = [
@@ -152,8 +152,9 @@ RETURN_REPLIES = [
 ]
 
 STOCK_REPLIES = [
-    "اسم یا عکس دقیق محصول رو بفرست تا درباره موجودی همون مدل بررسیش کنیم 👌",
-    "برای موجودی، خود محصول رو بفرست عزیز؛ اسم مدل، رنگ یا عکسش کافیه 🌹",
+    "بله موجوده ✅ سایزهای S تا 4XL هم موجودن 🌹",
+    "آره عزیز، موجوده ✅ S / M / L / XL / 2XL / 3XL / 4XL هم داریم 👌",
+    "بله این کار موجوده ✅ سایزبندی کامل S تا 4XL موجوده.",
 ]
 
 COLOR_REPLIES = [
@@ -293,8 +294,9 @@ INTENTS = {
     "price": ["قیمت چنده", "چنده", "قیمت", "چقدر قیمت", "تومن", "تومان"],
     "price_difference": ["چرا قیمت پیج فرق", "قیمت داخل پیج فرق", "پیج ارزونتر", "پیج گرونتر"],
     "low_price": ["چرا قیمتاتون پایینه", "چرا ارزونه", "چرا قیمت پایین", "چرا انقدر ارزونه"],
-    "size": ["چه سایزی", "سایز من", "سایز", "اندازه", "قد و وزن", "چه سایز بگیرم"],
+    "size": ["چه سایزی", "سایز من", "سایز", "اندازه", "قد و وزن", "چه سایز بگیرم", "اسمال", "مدیوم", "لارج", "ایکس لارج", "دو ایکس", "سه ایکس", "چهار ایکس", "2xl", "3xl", "4xl", "xxl", "xxxl"],
     "shipping_cost": ["هزینه ارسال", "هزینه پست", "پست چنده", "ارسال چنده", "کرایه"],
+    "shipping_cheap": ["چرا هزینه پست کمه", "چرا پست ارزونه", "چرا ارسال ارزونه", "هزینه ارسال چرا کمه"],
     "shipping_time": ["چند روزه میرسه", "کی میرسه", "زمان ارسال", "چقدر طول میکشه", "چند روز طول میکشه"],
     "shipping_days": ["چه روزهایی ارسال", "جمعه ارسال", "روز ارسال", "کی ارسال میکنید"],
     "shipping_method": ["تیپاکس", "باربری", "اتوبوس", "ترمینال", "چاپار", "پیک بفرست"],
@@ -309,7 +311,7 @@ INTENTS = {
 
 INTENT_PRIORITY = [
     "wait", "confused", "dont_know", "price_difference", "shipping_method",
-    "shipping_cost", "shipping_time", "shipping_days", "late", "low_price",
+    "shipping_cheap", "shipping_cost", "shipping_time", "shipping_days", "late", "low_price",
     "size", "payment", "stock", "color", "quality", "original", "return",
     "order", "price", "greeting", "thanks", "bye"
 ]
@@ -319,8 +321,12 @@ def detect_intent(text):
     if not n:
         return None
 
-    # Structured height/weight message should be handled as sizing before "price"
+    # Structured height/weight or a direct size token should be handled as sizing.
     if ("قد" in n and re.search(r"\d{3}", n)) or ("وزن" in n and re.search(r"\d{2,3}", n)):
+        return "size"
+    if re.search(r"(?i)(?:^|\s)(?:s|m|l|xl|2xl|3xl|4xl|xxl|xxxl)(?:$|\s)", (text or "").strip()):
+        return "size"
+    if any(x in n for x in ["اسمال", "مدیوم", "لارج", "ایکس لارج", "دو ایکس", "سه ایکس", "چهار ایکس"]):
         return "size"
 
     thresholds = {
@@ -351,7 +357,7 @@ SMART_CATEGORY_PHRASES = {
     "stock": ["موجود", "دارین", "دارید", "هست", "تموم", "ناموجود"],
     "restock": ["شارژ میشه", "کی موجود میشه", "دوباره میارین", "شارژ مجدد"],
     "color": ["رنگ", "رنگبندی", "چه رنگ", "مشکی", "سفید", "آبی", "قرمز"],
-    "size": ["سایز", "اندازه", "چه سایزی", "سایضم", "سایض", "لارج", "ایکس لارج"],
+    "size": ["سایز", "اندازه", "چه سایزی", "سایضم", "سایض", "اسمال", "مدیوم", "لارج", "ایکس لارج", "دو ایکس", "سه ایکس", "چهار ایکس", "xl", "2xl", "3xl", "4xl", "xxl", "xxxl"],
     "height_weight": ["قد", "وزن", "قدم", "وزنم", "قد و وزن"],
     "between_sizes": ["بین دو سایز", "بین لارج و ایکس", "کدوم سایز بهتره"],
     "size_chart": ["جدول سایز", "اندازه ها", "اندازه سایزها", "سایز چارت"],
@@ -385,6 +391,7 @@ SMART_CATEGORY_PHRASES = {
     "receipt": ["رسید", "فیش", "عکس واریز"],
     "shipping": ["ارسال", "پست", "فرستادن", "ارسالش"],
     "shipping_fee": ["هزینه پست", "هزینه ارسال", "پست چنده", "کرایه", "هزینه پوصت"],
+    "shipping_cheap": ["چرا پست ارزونه", "چرا هزینه پست کمه", "چرا ارسال کمه", "هزینه ارسال چرا پایینه"],
     "shipping_method": ["تیپاکس", "تیباکس", "تیباکث", "چاپار", "باربری", "اتوبوس", "پیک"],
     "shipping_time": ["کی میرسه", "چند روزه", "زمان ارسال", "چقدر طول میکشه"],
     "tracking": ["کد رهگیری", "رهگیری", "ترکینگ", "کد پست"],
@@ -420,7 +427,7 @@ QUESTIONISH = {
     "height_weight","between_sizes","size_chart","fabric","quality","thickness","stretch",
     "lining","warmth","shrink","colorfast","pilling","washing","original","brand","country",
     "photo","real_photo","video","model_photo","shipping","shipping_fee","shipping_method",
-    "shipping_time","tracking","late_delivery","return","exchange","wrong_item","damaged",
+    "shipping_time","shipping_cheap","tracking","late_delivery","return","exchange","wrong_item","damaged",
     "trust","store_address","in_person","working_hours","recommend","gift","comparison",
     "payment","card","receipt","total","cart"
 }
@@ -532,6 +539,14 @@ def answer_category(category, text, chat_id):
     return bank_answer(category)
 
 def multi_question_answer(text, chat_id, max_answers=3):
+    n = normalize_text(text)
+    # Do not mistake several fuzzy category hits for several questions.
+    # Require an actual conjunction or multiple question marks before composing
+    # a multi-part answer.
+    conjunctions = len(re.findall(r"(?:^|\s)و(?:\s|$)", n))
+    qmarks = (text or "").count("?") + (text or "").count("؟")
+    if conjunctions < 1 and qmarks < 2:
+        return None
     cats=[c for c in detect_categories(text, limit=8) if c in QUESTIONISH]
     # Remove semantically overlapping answers.
     chosen=[]
@@ -613,6 +628,7 @@ def resume_prompt(state, chat_id):
 # ------------------------------------------------------------
 
 def extract_height_weight(text):
+    """Extract plausible height/weight values from casual Persian messages."""
     n = normalize_text(text)
     height = None
     weight = None
@@ -633,18 +649,24 @@ def extract_height_weight(text):
         w_candidates = [x for x in nums if 40 <= x <= 180 and x != height]
         if w_candidates:
             weight = w_candidates[0]
-
     return height, weight
+
 
 def detect_fit(text):
     n = normalize_text(text)
-    if fuzzy_any(n, ["آزاد", "اورسایز", "لش", "گشاد"], 0.72):
+    if fuzzy_any(n, ["خیلی آزاد", "اورسایز", "لش", "گشاد", "آزاد"], 0.72):
         return "loose"
-    if fuzzy_any(n, ["جذب", "فیت", "چسبان"], 0.72):
+    if fuzzy_any(n, ["جذب", "چسبان", "فیت بدن", "تنگ"], 0.72):
         return "slim"
     return "regular"
 
+
 SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL", "4XL"]
+SIZE_LABEL_FA = {
+    "S": "اسمال", "M": "مدیوم", "L": "لارج", "XL": "ایکس‌لارج",
+    "2XL": "دو ایکس‌لارج", "3XL": "سه ایکس‌لارج", "4XL": "چهار ایکس‌لارج",
+}
+
 
 def shift_size(size, delta):
     try:
@@ -653,44 +675,145 @@ def shift_size(size, delta):
         return size
     return SIZE_ORDER[max(0, min(len(SIZE_ORDER)-1, i+delta))]
 
-def recommend_size(height, weight, fit="regular"):
-    # Practical heuristic for men's tops/hoodies, not a guarantee.
-    # Brand/pattern/chest circumference can change the result.
-    score = weight + max(0, height - 170) * 0.35
-    if score < 58:
+
+def extract_explicit_size(text):
+    """Understand Latin and common Persian ways customers name a size.
+
+    Numeric sizes are matched deterministically (not fuzzily) so 2XL/3XL/4XL
+    can never be confused with one another.
+    """
+    raw = unicodedata.normalize("NFKC", text or "").upper().replace(" ", "")
+    patterns = [
+        (r"4XL|XXXXL", "4XL"),
+        (r"3XL|XXXL", "3XL"),
+        (r"2XL|XXL", "2XL"),
+        (r"XL", "XL"),
+    ]
+    for pat, code in patterns:
+        if re.search(pat, raw):
+            return code
+
+    n = normalize_text(text)
+    # Persian multi-word aliases: exact containment is safer than fuzzy matching.
+    exact_aliases = [
+        (["چهار ایکس لارج", "4 ایکس لارج", "چهار ایکس", "فور ایکس"], "4XL"),
+        (["سه ایکس لارج", "3 ایکس لارج", "سه ایکس", "تری ایکس"], "3XL"),
+        (["دو ایکس لارج", "2 ایکس لارج", "دو ایکس", "ایکس ایکس لارج"], "2XL"),
+        (["ایکس لارج", "اکس لارج"], "XL"),
+    ]
+    for phrases, code in exact_aliases:
+        if any(normalize_text(ph) in n for ph in phrases):
+            return code
+
+    # Single-letter Latin sizes should be token-aware and checked last.
+    raw_spaced = unicodedata.normalize("NFKC", text or "").upper()
+    for code in ("L", "M", "S"):
+        if re.search(rf"(?<![A-Z]){code}(?![A-Z])", raw_spaced):
+            return code
+
+    # Common Persian names can tolerate minor misspellings.
+    simple_aliases = [
+        (["لارج"], "L"),
+        (["مدیوم", "مدیوم"], "M"),
+        (["اسمال", "اسمول"], "S"),
+    ]
+    for phrases, code in simple_aliases:
+        if fuzzy_any(n, phrases, 0.82):
+            return code
+    return None
+
+
+def detect_product_type(text):
+    n = normalize_text(text)
+    if fuzzy_any(n, ["هودی", "دورس", "سویشرت"], 0.78):
+        return "outerwear"
+    if fuzzy_any(n, ["تیشرت", "تی شرت", "پولوشرت", "پیراهن"], 0.78):
+        return "top"
+    if fuzzy_any(n, ["شلوار", "اسلش", "جاگر"], 0.78):
+        return "bottom"
+    return "generic"
+
+
+def recommend_size(height, weight, fit="regular", product_type="generic"):
+    """Conservative conversational estimate for S..4XL.
+
+    Weight drives the base size; height and garment/fitting preferences make small
+    adjustments. It is intentionally advisory because actual garment measurements
+    can vary between patterns.
+    """
+    # Broad adult menswear heuristic; not a substitute for garment measurements.
+    if weight < 55:
         size = "S"
-    elif score < 68:
+    elif weight < 65:
         size = "M"
-    elif score < 80:
+    elif weight < 75:
         size = "L"
-    elif score < 94:
+    elif weight < 88:
         size = "XL"
-    elif score < 108:
+    elif weight < 102:
         size = "2XL"
-    elif score < 123:
+    elif weight < 118:
         size = "3XL"
     else:
         size = "4XL"
 
-    if fit == "loose":
+    # Height can change torso/sleeve length needs, but should not dominate weight.
+    if height >= 190 and weight >= 70:
+        size = shift_size(size, 1)
+    elif height <= 162 and weight < 70:
+        size = shift_size(size, -1)
+
+    # Hoodies/sweatshirts are often preferred with a little more ease.
+    if product_type == "outerwear" and fit == "loose":
+        size = shift_size(size, 1)
+    elif fit == "loose":
         size = shift_size(size, 1)
     elif fit == "slim":
         size = shift_size(size, -1)
     return size
 
+
 def size_answer(text):
+    explicit = extract_explicit_size(text)
     h, w = extract_height_weight(text)
+
+    # A direct stock/size statement such as "من دو ایکس لارجم" should be understood.
+    if explicit and not (h and w):
+        return (
+            f"آره عزیز 🌹 سایز {explicit} ({SIZE_LABEL_FA[explicit]}) موجوده ✅ "
+            "سایزبندی کامل ما از S تا 4XL هست. اگه قد و وزنت رو هم بگی می‌تونم بگم همین سایز برای فیتی که دوست داری مناسبه یا بهتره یک سایز بالا/پایین برداری.",
+            explicit,
+        )
+
     if not h or not w:
         return random.choice(SIZE_ASK_REPLIES), None
     if not (140 <= h <= 215 and 40 <= w <= 180):
-        return "قد یا وزن رو درست متوجه نشدم. مثلاً بنویس «قد 180 وزن 80».", None
+        return "قد یا وزن رو درست متوجه نشدم. مثلاً بنویس «قد 180 وزن 80». 🌹", None
 
     fit = detect_fit(text)
-    size = recommend_size(h, w, fit)
-    fit_fa = {"loose": "آزاد", "slim": "جذب‌تر", "regular": "معمولی"}[fit]
+    product_type = detect_product_type(text)
+    size = recommend_size(h, w, fit, product_type)
+    fit_fa = {"loose": "آزاد/اورسایز", "slim": "جذب‌تر", "regular": "معمولی"}[fit]
+
+    stated_note = ""
+    if explicit:
+        distance = abs(SIZE_ORDER.index(explicit) - SIZE_ORDER.index(size))
+        if explicit == size:
+            stated_note = f" سایزی که خودت گفتی ({explicit}) هم با این پیشنهاد هماهنگه ✅"
+        elif distance == 1:
+            stated_note = f" سایز {explicit} که گفتی هم نزدیکه؛ انتخاب بین {size} و {explicit} بیشتر به آزاد یا جذب پوشیدن بستگی داره."
+        else:
+            stated_note = f" تو {explicit} رو گفتی؛ با این قد و وزن من {size} رو تقریبی‌تر می‌بینم، پس برای تصمیم قطعی اندازه دور سینه یا اندازه لباس فعلیت خیلی کمک می‌کنه."
+
+    neighbor = shift_size(size, 1)
+    extra = ""
+    if fit == "regular" and neighbor != size:
+        extra = f" اگر بین دو سایز مرددی یا لباس رو آزادتر دوست داری، {neighbor} هم می‌تونه انتخاب راحت‌تری باشه."
+
     body = (
-        f"با قد {h} و وزن {w} و فیت {fit_fa}، پیشنهاد تقریبی من {size} هست 👌 "
-        "البته الگوی هر لباس فرق می‌کنه؛ اگه دور سینه یا سایزی که معمولاً می‌پوشی رو هم بگی دقیق‌تر می‌تونم راهنمایی کنم."
+        f"با قد {h} و وزن {w}، برای فیت {fit_fa} پیشنهاد تقریبی من سایز {size} هست 👌"
+        f"{stated_note}{extra} سایزبندی کامل فروشگاه S، M، L، XL، 2XL، 3XL و 4XL موجوده ✅ "
+        "چون الگوی هر مدل می‌تونه کمی فرق کنه، اگه دور سینه/دور شکم یا سایزی که معمولاً می‌پوشی رو هم بگی، راهنمایی دقیق‌تر می‌شه."
     )
     return body, size
 
@@ -789,6 +912,19 @@ def init_db():
             quantity INTEGER DEFAULT 1
         )
     """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS card_messages(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            business_connection_id TEXT NOT NULL,
+            chat_id INTEGER NOT NULL,
+            message_id INTEGER NOT NULL,
+            card_snapshot TEXT,
+            created_at TEXT NOT NULL,
+            deleted_at TEXT,
+            UNIQUE(business_connection_id, chat_id, message_id)
+        )
+    """)
     oi_cols = {row[1] for row in conn.execute("PRAGMA table_info(order_items)").fetchall()}
     if "quantity" not in oi_cols:
         conn.execute("ALTER TABLE order_items ADD COLUMN quantity INTEGER DEFAULT 1")
@@ -850,12 +986,84 @@ def api(method, data=None):
         raise RuntimeError(payload)
     return payload["result"]
 
+def _extract_card_number_from_text(text):
+    if not text:
+        return ""
+    # Accept digits separated by spaces/dashes while avoiding unrelated long numbers.
+    for candidate in re.findall(r"(?:\d[ -]?){16}", str(text)):
+        digits = re.sub(r"\D", "", candidate)
+        if len(digits) == 16:
+            return digits
+    return ""
+
+def _remember_card_message(connection_id, chat_id, result, text):
+    if not isinstance(result, dict):
+        return
+    message_id = result.get("message_id")
+    if not message_id:
+        return
+    card = _extract_card_number_from_text(text)
+    if not card or "کارت" not in normalize_text(text):
+        return
+    conn = db()
+    conn.execute(
+        "INSERT OR IGNORE INTO card_messages("
+        "business_connection_id,chat_id,message_id,card_snapshot,created_at"
+        ") VALUES(?,?,?,?,?)",
+        (str(connection_id), int(chat_id), int(message_id), card, datetime.now().isoformat(timespec="seconds"))
+    )
+    conn.commit()
+    conn.close()
+
 def send_business(connection_id, chat_id, text):
-    return api("sendMessage", {
+    result = api("sendMessage", {
         "business_connection_id": connection_id,
         "chat_id": chat_id,
         "text": text,
     })
+    _remember_card_message(connection_id, chat_id, result, text)
+    return result
+
+def delete_tracked_card_messages():
+    conn = db()
+    rows = conn.execute(
+        "SELECT id,business_connection_id,chat_id,message_id "
+        "FROM card_messages WHERE deleted_at IS NULL ORDER BY id"
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        return 0, 0, 0
+
+    groups = {}
+    for row in rows:
+        key = (row["business_connection_id"], int(row["chat_id"]))
+        groups.setdefault(key, []).append(row)
+
+    deleted = 0
+    failed = 0
+    for (connection_id, chat_id), group in groups.items():
+        for start in range(0, len(group), 100):
+            chunk = group[start:start + 100]
+            ids = [int(r["message_id"]) for r in chunk]
+            try:
+                api("deleteBusinessMessages", {
+                    "business_connection_id": connection_id,
+                    "message_ids": json.dumps(ids),
+                })
+                now = datetime.now().isoformat(timespec="seconds")
+                conn = db()
+                conn.executemany(
+                    "UPDATE card_messages SET deleted_at=? WHERE id=?",
+                    [(now, int(r["id"])) for r in chunk]
+                )
+                conn.commit()
+                conn.close()
+                deleted += len(chunk)
+            except Exception as exc:
+                print(f"Card message delete failed chat={chat_id} ids={ids}: {exc!r}", flush=True)
+                failed += len(chunk)
+    return deleted, failed, len(rows)
 
 def send_admin(text):
     if ADMIN_ID:
@@ -975,6 +1183,24 @@ def cart_summary(chat_id):
     lines.append(f"جمع کل: {fmt_price(cart_total(chat_id))}")
     return "\n".join(lines)
 
+
+def looks_like_product_reference(text):
+    raw = (text or "").strip()
+    n = normalize_text(raw)
+    if not n:
+        return False
+    if re.search(r"https?://|t\.me/|instagram\.com/", raw, re.I):
+        return True
+    product_words = {
+        "هودی", "دورس", "تیشرت", "تی شرت", "شلوار", "ست", "پیراهن",
+        "کاپشن", "سویشرت", "بلوز", "پولوشرت", "کت", "شورت", "لباس"
+    }
+    if not any(w in n for w in product_words):
+        return False
+    # A short product/model mention should be treated as a product reference,
+    # but real questions such as "هودی چه سایزیه؟" should go to intent handling.
+    return not looks_like_question(raw)
+
 def parse_count(text):
     n = normalize_text(text)
     m = re.search(r"\d+", n)
@@ -1087,6 +1313,8 @@ def answer_intent(intent, text, chat_id):
         ])
     if intent == "shipping_method":
         return random.choice(SHIPPING_METHOD_REPLIES)
+    if intent == "shipping_cheap":
+        return random.choice(SHIPPING_CHEAP_REPLIES)
     if intent == "shipping_cost":
         return random.choice(SHIPPING_COST_REPLIES)
     if intent == "shipping_time":
@@ -1170,6 +1398,35 @@ def handle_admin_message(msg):
             api("sendMessage", {"chat_id": chat_id, "text": "این بخش فقط برای مدیر فروشگاه فعاله."})
         return
 
+    if text.startswith("/changecard") or text.startswith("/setpayment"):
+        command = "/changecard" if text.startswith("/changecard") else "/setpayment"
+        raw = text.replace(command, "", 1).strip()
+        parts = [part.strip() for part in raw.split("|", 1)]
+        if len(parts) != 2:
+            send_admin("فرمت درست:\n/changecard 6037991234567890 | نام و نام خانوادگی صاحب کارت")
+            return
+        card = re.sub(r"\D", "", parts[0])
+        holder = parts[1]
+        if len(card) != 16 or not holder:
+            send_admin("فرمت درست:\n/changecard 6037991234567890 | نام و نام خانوادگی صاحب کارت")
+            return
+        set_setting("card_number", card)
+        set_setting("card_holder", holder)
+        send_admin(f"✅ اطلاعات پرداخت تغییر کرد.\nشماره کارت: {card}\nبه نام: {holder}")
+        return
+
+    if text == "/deletecards":
+        deleted, failed, total = delete_tracked_card_messages()
+        if total == 0:
+            send_admin("هیچ پیام شماره‌کارت ذخیره‌شده‌ای برای حذف پیدا نشد.")
+        elif failed == 0:
+            send_admin(f"✅ پیام‌های شماره کارت از {deleted} مورد با موفقیت حذف شدند.")
+        else:
+            send_admin(
+                f"حذف پیام‌های کارت انجام شد.\n✅ حذف‌شده: {deleted}\n⚠️ ناموفق: {failed}\nکل بررسی‌شده: {total}"
+            )
+        return
+
     if text.startswith("/setcard"):
         card = re.sub(r"\D", "", text.replace("/setcard", "", 1))
         if len(card) != 16:
@@ -1238,9 +1495,12 @@ def handle_admin_message(msg):
     if text == "/admin":
         send_admin(
             "⚙️ دستورات:\n"
+            "/changecard شماره کارت | نام صاحب کارت\n"
             "/setcard شماره کارت\n"
             "/setholder نام صاحب کارت\n"
-            "/cardinfo\n/orders\n"
+            "/cardinfo\n"
+            "/deletecards  ← حذف پیام‌های قبلی کارت از چت مشتری‌ها\n"
+            "/orders\n"
             "/pause CHAT_ID\n/resume CHAT_ID\n/resetprices CHAT_ID"
         )
 
@@ -1312,7 +1572,7 @@ def handle_business_message(msg, business_owner_id=0):
         if state == "await_product_count":
             send_business(
                 connection_id, chat_id,
-                "عکس رو گرفتم 👌 اگه چند محصول توی عکس‌ها داری، تعداد کل رو بگو؛ از ۱ تا ۵۰. بعد اسم هرکدوم رو یکی‌یکی ازت می‌گیرم که اشتباه نشه."
+                "بله موجوده ✅ عکس رو گرفتم 👌 چندتا محصول می‌خوای؟ از ۱ تا ۵۰. بعد اسم‌ها رو یکی‌یکی ازت می‌گیرم که سفارش دقیق ثبت بشه."
             )
         elif state == "await_item_name":
             c = get_chat(chat_id)
@@ -1369,7 +1629,7 @@ def handle_business_message(msg, business_owner_id=0):
     # Let customer ask normal shop questions in the middle of checkout.
     # Answer first, then gently return to the exact unfinished step.
     global_intents = {
-        "shipping_method", "shipping_cost", "shipping_time", "shipping_days",
+        "shipping_method", "shipping_cheap", "shipping_cost", "shipping_time", "shipping_days",
         "late", "low_price", "price_difference", "payment", "stock", "color",
         "quality", "original", "return"
     }
@@ -1483,7 +1743,7 @@ def handle_business_message(msg, business_owner_id=0):
             current = cart_unit_count(chat_id)
             if current >= MAX_ITEMS_PER_ORDER:
                 update_chat(chat_id, state="await_size")
-                send_business(connection_id, chat_id, "به سقف ۵۰ عدد رسیدیم 👌 حالا سایزها رو بگو. اگر نمی‌دونی بنویس «نمیدونم».")
+                send_business(connection_id, chat_id, "به سقف ۵۰ عدد رسیدیم 👌 حالا سایزها رو بگو؛ S، M، L، XL، 2XL، 3XL یا 4XL. اگر نمی‌دونی بنویس «نمیدونم».")
             else:
                 update_chat(chat_id, state="await_add_count")
                 send_business(connection_id, chat_id, f"حتماً. چند محصول دیگه اضافه کنیم؟ حداکثر {MAX_ITEMS_PER_ORDER-current} عدد.")
@@ -1494,7 +1754,7 @@ def handle_business_message(msg, business_owner_id=0):
             send_business(
                 connection_id, chat_id,
                 f"عالی، اینا نهایی شدن ✅\n\n{cart_summary(chat_id)}\n\n"
-                "حالا سایز محصول‌ها رو بگو. مثلاً «هودی XL، تیشرت L». اگر سایزت رو نمی‌دونی فقط بگو «نمیدونم»."
+                "حالا سایز محصول‌ها رو بگو. سایزهای موجود S، M، L، XL، 2XL، 3XL و 4XL هستن؛ مثلاً «هودی L، تیشرت M». اگر سایزت رو نمی‌دونی فقط بگو «نمیدونم»."
             )
             return
 
@@ -1532,27 +1792,20 @@ def handle_business_message(msg, business_owner_id=0):
                 send_business(connection_id, chat_id, ans)
             return
 
-        # Accept normal explicit sizes.
-        n = normalize_text(text).upper()
-        if re.search(r"\b(?:S|M|L|XL|XXL|2XL|3XL|4XL)\b", n):
-            update_chat(chat_id, size=text.strip(), state="await_name")
-            send_business(connection_id, chat_id, "گرفتم 👌 حالا اسم و فامیلی تحویل‌گیرنده رو بفرست.")
+        # Accept every supported explicit size, including Persian aliases.
+        chosen = extract_explicit_size(text)
+        if chosen:
+            update_chat(chat_id, size=chosen, state="await_name")
+            send_business(
+                connection_id, chat_id,
+                f"گرفتم 👌 سایز {chosen} ثبت شد ✅ حالا اسم و فامیلی تحویل‌گیرنده رو بفرست."
+            )
             return
-
-        # Natural phrases like "لارج" or "ایکس لارج"
-        size_words = {
-            "مدیوم": "M", "لارج": "L", "ایکس لارج": "XL",
-            "دو ایکس": "2XL", "سه ایکس": "3XL",
-        }
-        for phrase, code in size_words.items():
-            if fuzzy_any(text, [phrase], 0.68):
-                update_chat(chat_id, size=code, state="await_name")
-                send_business(connection_id, chat_id, f"اوکی، {code} ثبت شد 👌 حالا اسم و فامیلی تحویل‌گیرنده رو بفرست.")
-                return
 
         send_business(
             connection_id, chat_id,
-            "سایز رو دقیق نگرفتم 😄 اگر می‌دونی مثلاً بنویس «XL». اگر نمی‌دونی بگو «نمیدونم» تا با قد و وزن راهنماییت کنم."
+            "سایز رو دقیق نگرفتم 😄 سایزهای موجود S، M، L، XL، 2XL، 3XL و 4XL هستن. "
+            "اگر نمی‌دونی کدوم مناسبه بگو «نمیدونم» یا قد و وزنت رو بفرست تا راهنماییت کنم."
         )
         return
 
@@ -1644,6 +1897,16 @@ def handle_business_message(msg, business_owner_id=0):
         return
 
     # ----------------------- No active order -----------------------
+    # A bare clothing model/name or product link means the customer is referring
+    # to a product. Per store policy, treat it as available and start the order flow.
+    if looks_like_product_reference(text):
+        start_order(chat_id)
+        send_business(
+            connection_id, chat_id,
+            "بله موجوده ✅ سایزهای S تا 4XL هم موجودن 🌹 چندتا محصول می‌خوای؟ فقط تعداد رو بگو؛ بعد اسم‌ها رو یکی‌یکی ثبت می‌کنیم."
+        )
+        return
+
     if intent == "order":
         start_order(chat_id)
         send_business(

@@ -1,0 +1,8 @@
+V9.3 Card Control
+- Added admin-only /changecard CARD | HOLDER command.
+- Existing /setcard and /setholder remain available.
+- Added admin-only /deletecards command.
+- Card-bearing business messages are tracked by business_connection_id, chat_id and message_id.
+- /deletecards uses Telegram Bot API deleteBusinessMessages in batches up to 100 messages per chat.
+- Deletion status is persisted to avoid repeatedly deleting already removed messages.
+- Requires Telegram Business bot right can_delete_sent_messages (or can_delete_all_messages).
