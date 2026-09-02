@@ -59,9 +59,12 @@ def msg(text):
 
 sequence=[
 ("3","await_item_name"),
-("هودی مشکی","await_item_name"),
-("تیشرت سفید","await_item_name"),
-("دورس طوسی","confirm_cart"),
+("هودی مشکی","await_item_photo"),
+("عکس ندارم","await_item_name"),
+("تیشرت سفید","await_item_photo"),
+("عکس ندارم","await_item_name"),
+("دورس طوسی","await_item_photo"),
+("عکس ندارم","confirm_cart"),
 ("همین‌ها","await_size"),
 ("بلد نیستم","await_height_weight"),
 ("چی میگی","await_height_weight"),

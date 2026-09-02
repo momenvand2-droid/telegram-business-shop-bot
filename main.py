@@ -588,6 +588,7 @@ def state_explanation(state):
     mapping = {
         "await_product_count": "فقط می‌خوام بدونم چند محصول می‌خوای. مثلاً بنویس «3». اگه چندتا از یک مدل می‌خوای می‌تونی بنویسی «5 تا هودی مشکی».",
         "await_item_name": "دارم محصول‌های سفارشت رو یکی‌یکی ثبت می‌کنم. فقط اسم محصولی که الان می‌خوای اضافه بشه رو بفرست.",
+        "await_item_photo": "اسم محصول ثبت شده؛ الان عکس همون محصول رو بفرست. اگر عکس نداری بنویس «عکس ندارم» تا ادامه بدیم.",
         "confirm_cart": "لیست محصولات رو بستیم؛ فقط می‌خوام بدونم محصول دیگه‌ای اضافه می‌کنی یا همین‌ها نهایی بشن.",
         "await_add_count": "گفتی محصول بیشتری می‌خوای؛ فقط تعداد محصول‌های جدید رو بگو.",
         "await_size": "الان فقط سایز هر محصول رو لازم دارم. اگه سایزت رو نمی‌دونی، قد و وزنت رو بفرست تا راهنماییت کنم.",
@@ -610,6 +611,10 @@ def resume_prompt(state, chat_id):
         current = int(c["collected_items"] or 0) + 1
         expected = int(c["expected_items"] or 1)
         return f"برای ادامه اسم محصول شماره {current} از {expected} رو بفرست."
+    if state == "await_item_photo":
+        rows = cart_items(chat_id)
+        product = rows[-1]["product_name"] if rows else "محصول"
+        return f"برای ادامه عکس «{product}» رو بفرست؛ اگر نداری بنویس «عکس ندارم»."
     if state == "confirm_cart":
         return "برای ادامه بنویس «همین‌ها» یا «اضافه»."
     if state == "await_add_count":
@@ -864,7 +869,8 @@ def init_db():
             misunderstood_count INTEGER DEFAULT 0,
             pending_size TEXT DEFAULT '',
             cancel_return_state TEXT DEFAULT '',
-            edit_return_state TEXT DEFAULT ''
+            edit_return_state TEXT DEFAULT '',
+            pending_product_photo TEXT DEFAULT ''
         )
     """)
     cols = {row[1] for row in conn.execute("PRAGMA table_info(chats)").fetchall()}
@@ -875,6 +881,7 @@ def init_db():
         "pending_size": "TEXT DEFAULT ''",
         "cancel_return_state": "TEXT DEFAULT ''",
         "edit_return_state": "TEXT DEFAULT ''",
+        "pending_product_photo": "TEXT DEFAULT ''",
     }
     for col, spec in migrations.items():
         if col not in cols:
@@ -888,7 +895,8 @@ def init_db():
             product_name TEXT NOT NULL,
             price INTEGER NOT NULL,
             quantity INTEGER DEFAULT 1,
-            size TEXT DEFAULT ''
+            size TEXT DEFAULT '',
+            photo_file_id TEXT DEFAULT ''
         )
     """)
     cart_cols = {row[1] for row in conn.execute("PRAGMA table_info(cart_items)").fetchall()}
@@ -896,6 +904,8 @@ def init_db():
         conn.execute("ALTER TABLE cart_items ADD COLUMN quantity INTEGER DEFAULT 1")
     if "size" not in cart_cols:
         conn.execute("ALTER TABLE cart_items ADD COLUMN size TEXT DEFAULT ''")
+    if "photo_file_id" not in cart_cols:
+        conn.execute("ALTER TABLE cart_items ADD COLUMN photo_file_id TEXT DEFAULT ''")
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS product_price_history(
@@ -932,7 +942,8 @@ def init_db():
             product_name TEXT NOT NULL,
             price INTEGER NOT NULL,
             quantity INTEGER DEFAULT 1,
-            size TEXT DEFAULT ''
+            size TEXT DEFAULT '',
+            photo_file_id TEXT DEFAULT ''
         )
     """)
 
@@ -953,6 +964,8 @@ def init_db():
         conn.execute("ALTER TABLE order_items ADD COLUMN quantity INTEGER DEFAULT 1")
     if "size" not in oi_cols:
         conn.execute("ALTER TABLE order_items ADD COLUMN size TEXT DEFAULT ''")
+    if "photo_file_id" not in oi_cols:
+        conn.execute("ALTER TABLE order_items ADD COLUMN photo_file_id TEXT DEFAULT ''")
 
     conn.commit()
     conn.close()
@@ -1163,7 +1176,8 @@ def clear_cart(chat_id):
 def cart_items(chat_id):
     conn = db()
     rows = conn.execute(
-        "SELECT position,product_name,price,COALESCE(quantity,1) AS quantity,COALESCE(size,'') AS size "
+        "SELECT position,product_name,price,COALESCE(quantity,1) AS quantity,COALESCE(size,'') AS size,"
+        "COALESCE(photo_file_id,'') AS photo_file_id "
         "FROM cart_items WHERE chat_id=? ORDER BY position",
         (chat_id,)
     ).fetchall()
@@ -1173,7 +1187,7 @@ def cart_items(chat_id):
 def cart_unit_count(chat_id):
     return sum(int(r["quantity"]) for r in cart_items(chat_id))
 
-def add_cart_item(chat_id, product_name, quantity=1):
+def add_cart_item(chat_id, product_name, quantity=1, photo_file_id=""):
     quantity = max(1, int(quantity))
     if cart_unit_count(chat_id) + quantity > MAX_ITEMS_PER_ORDER:
         return None
@@ -1181,13 +1195,22 @@ def add_cart_item(chat_id, product_name, quantity=1):
     price = get_or_create_product_price(chat_id, product_name)
     conn = db()
     conn.execute(
-        "INSERT INTO cart_items(chat_id,position,product_name,price,quantity) VALUES(?,?,?,?,?)",
-        (chat_id, position, product_name.strip(), price, quantity)
+        "INSERT INTO cart_items(chat_id,position,product_name,price,quantity,photo_file_id) VALUES(?,?,?,?,?,?)",
+        (chat_id, position, product_name.strip(), price, quantity, photo_file_id or "")
     )
     conn.commit()
     conn.close()
     update_chat(chat_id, collected_items=position)
     return position, price, quantity
+
+def set_cart_item_photo(chat_id, position, file_id):
+    conn = db()
+    conn.execute(
+        "UPDATE cart_items SET photo_file_id=? WHERE chat_id=? AND position=?",
+        (file_id or "", chat_id, int(position)),
+    )
+    conn.commit()
+    conn.close()
 
 def next_unsized_item(chat_id):
     return next((r for r in cart_items(chat_id) if not r["size"]), None)
@@ -1265,6 +1288,51 @@ def parse_quantity_product(text):
         return None, None
     return int(m.group(1)), m.group(2).strip()
 
+def is_no_product_photo(text):
+    n = normalize_text(text)
+    phrases = [
+        "عکس ندارم", "عکسشو ندارم", "عکسش رو ندارم", "بدون عکس", "ندارم", "نه",
+        "عکس نیست", "رد شو", "برو بعدی", "بعدی",
+    ]
+    return n in {normalize_text(x) for x in phrases} or any(
+        normalize_text(x) in n for x in ["عکس ندارم", "عکسش رو ندارم", "عکسشو ندارم", "بدون عکس"]
+    )
+
+def finish_product_photo_step(chat_id):
+    """Advance only after the current product has a name and photo decision."""
+    c = get_chat(chat_id)
+    expected = int(c["expected_items"] or 1)
+    collected = int(c["collected_items"] or 0)
+    update_chat(chat_id, pending_product_photo="")
+    if collected < expected:
+        update_chat(chat_id, state="await_item_name")
+        return f"اسم محصول بعدی رو بفرست ({collected + 1} از {expected})."
+    update_chat(chat_id, state="confirm_cart")
+    return cart_summary(chat_id) + "\n\nهمین‌ها نهایی بشن یا چیزی اضافه کنیم؟"
+
+def is_product_identification_question(text):
+    n = normalize_text(text)
+    return (
+        "از کجا فهمیدی" in n
+        or "چجوری فهمیدی" in n
+        or "چطور فهمیدی" in n
+        or ("کدوم محصول" in n and any(x in n for x in ["میگم", "میخوام", "گفتم"]))
+        or ("کدومو" in n and any(x in n for x in ["میگم", "میخوام", "فهمیدی"]))
+    )
+
+def product_identification_answer(chat_id):
+    rows = cart_items(chat_id)
+    if not rows:
+        return (
+            "بیشتر محصولات ما موجودن ✅ برای اینکه مدل دقیق مشخص بشه، اسم محصول رو می‌گیرم و عکسش رو هم اگر داشته باشی ثبت می‌کنم."
+        )
+    item = rows[-1]
+    return (
+        "بیشتر محصولات ما موجودن ✅ من قیمت رو بر اساس اسم و سبک محصولی که ثبت کردی گفتم؛ "
+        f"قیمت این سبک محصول الان حدود {fmt_price(item['price'])} رسیده. "
+        "برای اینکه دقیقاً همون مدل ثبت بشه عکسش رو هم می‌گیرم؛ اگر عکس نداری با همون اسم ادامه می‌دیم 🌹"
+    )
+
 def extract_phone(text):
     n = (text or "").translate(PERSIAN_DIGITS)
     digits = re.sub(r"\D", "", n)
@@ -1339,7 +1407,7 @@ def reset_order_state(chat_id):
     update_chat(
         chat_id, state="", product="", size="", full_name="", phone="", address="",
         last_price=0, expected_items=0, collected_items=0, misunderstood_count=0,
-        pending_size="", cancel_return_state="", edit_return_state="",
+        pending_size="", cancel_return_state="", edit_return_state="", pending_product_photo="",
     )
 
 def cancel_latest_waiting_order(chat_id):
@@ -1407,6 +1475,7 @@ def start_order(chat_id):
         pending_size="",
         cancel_return_state="",
         edit_return_state="",
+        pending_product_photo="",
     )
 
 def payment_text():
@@ -1456,8 +1525,8 @@ def create_order(chat_id):
     order_id = cur.lastrowid
     for r in items:
         conn.execute(
-            "INSERT INTO order_items(order_id,position,product_name,price,quantity,size) VALUES(?,?,?,?,?,?)",
-            (order_id, r["position"], r["product_name"], r["price"], r["quantity"], r["size"])
+            "INSERT INTO order_items(order_id,position,product_name,price,quantity,size,photo_file_id) VALUES(?,?,?,?,?,?,?)",
+            (order_id, r["position"], r["product_name"], r["price"], r["quantity"], r["size"], r["photo_file_id"])
         )
     conn.commit()
     conn.close()
@@ -1832,22 +1901,36 @@ def handle_business_message(msg, business_owner_id=0):
             return
 
         # Product screenshot/photo
+        file_id = msg["photo"][-1]["file_id"]
         if not state:
             start_order(chat_id)
             state = "await_product_count"
+            update_chat(chat_id, pending_product_photo=file_id)
         if state == "await_product_count":
+            update_chat(chat_id, pending_product_photo=file_id)
             send_business(
                 connection_id, chat_id,
-                "بله موجوده ✅ عکس رو گرفتم 👌 چندتا محصول می‌خوای؟ از ۱ تا ۵۰. بعد اسم‌ها رو یکی‌یکی ازت می‌گیرم که سفارش دقیق ثبت بشه."
+                "بله موجوده ✅ عکس محصول اول رو گرفتم 👌 چندتا محصول می‌خوای؟ از ۱ تا ۵۰. بعد اسم‌ها رو یکی‌یکی می‌گیرم."
             )
         elif state == "await_item_name":
+            update_chat(chat_id, pending_product_photo=file_id)
             c = get_chat(chat_id)
             current = int(c["collected_items"] or 0) + 1
             expected = int(c["expected_items"] or 1)
             send_business(
                 connection_id, chat_id,
-                f"عکس رسید 👌 برای اینکه مدل رو اشتباه حدس نزنم، اسم محصول شماره {current} از {expected} رو هم برام بنویس."
+                f"عکس محصول شماره {current} از {expected} رسید 👌 حالا اسم همین محصول رو هم بنویس تا دقیق ثبتش کنم."
             )
+        elif state == "await_item_photo":
+            rows = cart_items(chat_id)
+            if not rows:
+                update_chat(chat_id, state="await_item_name")
+                send_business(connection_id, chat_id, "عکس رو گرفتم 👌 حالا اسم محصول رو هم بفرست.")
+                return
+            item = rows[-1]
+            set_cart_item_photo(chat_id, item["position"], file_id)
+            follow = finish_product_photo_step(chat_id)
+            send_business(connection_id, chat_id, f"عکس «{item['product_name']}» هم ثبت شد ✅\n\n{follow}")
         else:
             send_business(connection_id, chat_id, "عکس رو گرفتم 👌 اگه درباره همین محصول سوال داری با یه جمله بپرس.")
         return
@@ -1892,6 +1975,17 @@ def handle_business_message(msg, business_owner_id=0):
     if is_material_question(text):
         resume = resume_prompt(state, chat_id) if state else ""
         answer = material_description_answer()
+        send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
+        return
+
+    if state == "await_item_photo" and is_no_product_photo(text):
+        follow = finish_product_photo_step(chat_id)
+        send_business(connection_id, chat_id, "اشکالی نداره، بدون عکس ادامه می‌دیم 👌\n\n" + follow)
+        return
+
+    if is_product_identification_question(text):
+        resume = resume_prompt(state, chat_id) if state else ""
+        answer = product_identification_answer(chat_id)
         send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
         return
 
@@ -1994,7 +2088,7 @@ def handle_business_message(msg, business_owner_id=0):
 
     # Several questions in one message: answer up to three without losing checkout state.
     multi = multi_question_answer(text, chat_id)
-    if multi and state not in {"await_product_count", "await_item_name", "await_add_count", "await_size", "await_height_weight"}:
+    if multi and state not in {"await_product_count", "await_item_name", "await_item_photo", "await_add_count", "await_size", "await_height_weight"}:
         resume = resume_prompt(state, chat_id) if state else ""
         send_business(connection_id, chat_id, multi + (f"\n\n{resume}" if resume else ""))
         return
@@ -2033,7 +2127,7 @@ def handle_business_message(msg, business_owner_id=0):
         "quality", "original", "return"
     }
     if intent in global_intents:
-        product_entry_states = {"await_product_count", "await_item_name", "await_add_count"}
+        product_entry_states = {"await_product_count", "await_item_name", "await_item_photo", "await_add_count"}
         # A bare product name such as "تیشرت سفید" or "هودی مشکی" must be
         # saved as a product, not mistaken for a color/quality question.
         if state not in product_entry_states or looks_like_question(text):
@@ -2048,7 +2142,7 @@ def handle_business_message(msg, business_owner_id=0):
     # Size question can also interrupt most form states, except when the size answer
     # itself is currently expected.
     if intent == "size" and state not in {"await_size", "await_height_weight", "confirm_size"}:
-        product_entry_states = {"await_product_count", "await_item_name", "await_add_count"}
+        product_entry_states = {"await_product_count", "await_item_name", "await_item_photo", "await_add_count"}
         if state not in product_entry_states or looks_like_question(text):
             answer, _ = size_answer(text)
             resume = resume_prompt(state, chat_id) if state else ""
@@ -2057,7 +2151,7 @@ def handle_business_message(msg, business_owner_id=0):
 
     # Long-tail customer question during personal/payment form steps.
     # We answer it, keep the state untouched, then remind the exact unfinished field.
-    if smart_categories and state in {"confirm_cart", "await_name", "await_phone", "await_address", "confirm_order", "await_receipt"}:
+    if smart_categories and state in {"await_item_photo", "confirm_cart", "await_name", "await_phone", "await_address", "confirm_order", "await_receipt"}:
         cat = next((c for c in smart_categories if c in QUESTIONISH), None)
         if cat:
             if cat in {"payment", "card"} and state != "await_receipt":
@@ -2092,6 +2186,12 @@ def handle_business_message(msg, business_owner_id=0):
             f"نام: {c['full_name']}\nموبایل: {c['phone']}\nآدرس: {c['address']}\n"
             f"Chat ID: {chat_id}\n\n/pause {chat_id}"
         )
+        for item in cart_items(chat_id):
+            if item["photo_file_id"]:
+                send_admin_photo(
+                    item["photo_file_id"],
+                    f"🖼 عکس محصول سفارش #{order_id}\n{item['product_name']} × {item['quantity']} | سایز {item['size']}",
+                )
         return
 
     if state == "await_product_count":
@@ -2101,16 +2201,18 @@ def handle_business_message(msg, business_owner_id=0):
                 send_business(connection_id, chat_id, "تعداد باید بین ۱ تا ۵۰ باشه عزیز.")
                 return
             clear_cart(chat_id)
-            result = add_cart_item(chat_id, product, qty)
+            pending_photo = c["pending_product_photo"] or ""
+            result = add_cart_item(chat_id, product, qty, pending_photo)
             position, price, quantity = result
-            update_chat(chat_id, expected_items=1, collected_items=1, state="confirm_cart")
-            send_business(
-                connection_id, chat_id,
-                f"اوکی 👌 {quantity} عدد «{product}» ثبت شد.\n"
-                f"هر عدد حدود {fmt_price(price)}؛ جمع این مدل {fmt_price(price*quantity)}.\n\n"
-                f"{cart_summary(chat_id)}\n\n"
-                "همین رو می‌خوای یا محصول دیگه‌ای هم اضافه کنیم؟"
-            )
+            update_chat(chat_id, expected_items=1, collected_items=1)
+            if pending_photo:
+                follow = finish_product_photo_step(chat_id)
+                photo_note = "عکسش هم ثبت شد ✅\n\n"
+            else:
+                update_chat(chat_id, state="await_item_photo")
+                follow = f"حالا عکس «{product}» رو بفرست؛ اگر نداری بنویس «عکس ندارم»."
+                photo_note = ""
+            send_business(connection_id, chat_id, f"اوکی 👌 {quantity} عدد «{product}» ثبت شد؛ هر عدد حدود {fmt_price(price)}.\n{photo_note}{follow}")
             return
 
         count = parse_count(text)
@@ -2145,27 +2247,31 @@ def handle_business_message(msg, business_owner_id=0):
         if qty < 1 or qty > remaining:
             send_business(connection_id, chat_id, f"با سفارش فعلی حداکثر {remaining} عدد دیگه جا داریم.")
             return
-        result = add_cart_item(chat_id, product, qty)
+        pending_photo = c["pending_product_photo"] or ""
+        result = add_cart_item(chat_id, product, qty, pending_photo)
         if not result:
             send_business(connection_id, chat_id, "سقف سفارش ۵۰ عدده عزیز.")
             return
         position, price, quantity = result
-
-        c = get_chat(chat_id)
-        expected = int(c["expected_items"] or 1)
-        collected = int(c["collected_items"] or 0)
 
         if quantity == 1:
             msg_text = f"گرفتم 👌 «{product}» — حدود {fmt_price(price)}."
         else:
             msg_text = f"گرفتم 👌 «{product}» × {quantity} — هر عدد حدود {fmt_price(price)}؛ جمع {fmt_price(price*quantity)}."
 
-        if collected < expected:
-            msg_text += f"\nاسم محصول بعدی رو بفرست ({collected+1} از {expected})."
+        if pending_photo:
+            msg_text += "\nعکس همین محصول هم ثبت شد ✅\n\n" + finish_product_photo_step(chat_id)
         else:
-            update_chat(chat_id, state="confirm_cart")
-            msg_text += "\n\n" + cart_summary(chat_id) + "\n\nهمین‌ها نهایی بشن یا چیزی اضافه کنیم؟"
+            update_chat(chat_id, state="await_item_photo", pending_product_photo="")
+            msg_text += f"\nحالا عکس «{product}» رو بفرست؛ اگر عکس نداری بنویس «عکس ندارم»."
         send_business(connection_id, chat_id, msg_text)
+        return
+
+    if state == "await_item_photo":
+        send_business(
+            connection_id, chat_id,
+            "عکس همین محصول رو بفرست؛ اگر عکسش رو نداری فقط بنویس «عکس ندارم» تا بریم مرحله بعد."
+        )
         return
 
     if state == "confirm_cart":

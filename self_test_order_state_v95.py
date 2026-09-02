@@ -24,6 +24,42 @@ assert bot.get_setting("wholesale_admin_username") == "@omde_admin"
 bot.handle_admin_message({"chat": {"id": 70001}, "text": "/wholesaleinfo"})
 assert "@omde_admin" in admin_sent[-1]
 
+def deliver(chat_id, text=None, photo_file_id=None):
+    message = {"business_connection_id": "biz", "chat": {"id": chat_id}, "from": {"id": 999}}
+    if text is not None:
+        message["text"] = text
+    if photo_file_id:
+        message["photo"] = [{"file_id": photo_file_id}]
+    bot.handle_business_message(message, business_owner_id=111)
+
+# Photo first, then name: both must be associated with the same product.
+photo_chat = 95002
+bot.ensure_chat(photo_chat, "biz")
+bot.start_order(photo_chat)
+deliver(photo_chat, "1")
+assert bot.get_chat(photo_chat)["state"] == "await_item_name"
+deliver(photo_chat, photo_file_id="product-photo-1")
+assert bot.get_chat(photo_chat)["state"] == "await_item_name"
+deliver(photo_chat, "هودی اسپایدرمن")
+assert bot.get_chat(photo_chat)["state"] == "confirm_cart"
+photo_item = bot.cart_items(photo_chat)[0]
+assert photo_item["product_name"] == "هودی اسپایدرمن"
+assert photo_item["photo_file_id"] == "product-photo-1"
+deliver(photo_chat, "از کجا فهمیدی کدوم محصول رو میخوام؟")
+assert "بیشتر محصولات ما موجودن" in sent[-1]
+assert bot.fmt_price(photo_item["price"]) in sent[-1]
+
+# Name first, no photo: «عکس ندارم» must advance without blocking.
+no_photo_chat = 95003
+bot.ensure_chat(no_photo_chat, "biz")
+bot.start_order(no_photo_chat)
+deliver(no_photo_chat, "1")
+deliver(no_photo_chat, "تیشرت سفید")
+assert bot.get_chat(no_photo_chat)["state"] == "await_item_photo"
+deliver(no_photo_chat, "عکس ندارم")
+assert bot.get_chat(no_photo_chat)["state"] == "confirm_cart"
+assert bot.cart_items(no_photo_chat)[0]["photo_file_id"] == ""
+
 chat = 95001
 bot.ensure_chat(chat, "biz")
 bot.add_cart_item(chat, "هودی")
