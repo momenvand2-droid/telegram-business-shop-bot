@@ -711,14 +711,15 @@ def extract_explicit_size(text):
         if re.search(rf"(?<![A-Z]){code}(?![A-Z])", raw_spaced):
             return code
 
-    # Common Persian names can tolerate minor misspellings.
+    # Persian size names must be explicit words/phrases. Never fuzzy-match short
+    # customer words such as «اسم» to «اسمال».
     simple_aliases = [
         (["لارج"], "L"),
-        (["مدیوم", "مدیوم"], "M"),
+        (["مدیوم"], "M"),
         (["اسمال", "اسمول"], "S"),
     ]
     for phrases, code in simple_aliases:
-        if fuzzy_any(n, phrases, 0.82):
+        if any(re.search(rf"(?:^|\s){re.escape(normalize_text(ph))}(?:$|\s)", n) for ph in phrases):
             return code
     return None
 
@@ -811,9 +812,8 @@ def size_answer(text):
         extra = f" اگر بین دو سایز مرددی یا لباس رو آزادتر دوست داری، {neighbor} هم می‌تونه انتخاب راحت‌تری باشه."
 
     body = (
-        f"با قد {h} و وزن {w}، برای فیت {fit_fa} پیشنهاد تقریبی من سایز {size} هست 👌"
-        f"{stated_note}{extra} سایزبندی کامل فروشگاه S، M، L، XL، 2XL، 3XL و 4XL موجوده ✅ "
-        "چون الگوی هر مدل می‌تونه کمی فرق کنه، اگه دور سینه/دور شکم یا سایزی که معمولاً می‌پوشی رو هم بگی، راهنمایی دقیق‌تر می‌شه."
+        f"با قد {h} و وزن {w}، برای فیت {fit_fa} پیشنهاد من {size} هست 👌"
+        f"{stated_note}{extra}"
     )
     return body, size
 
@@ -1223,7 +1223,16 @@ def extract_phone(text):
     return ""
 
 def is_done_choice(text):
-    return fuzzy_any(text, ["همین ها", "همیناست", "تموم", "تمام", "دیگه ندارم", "نهایی", "همین"], 0.68)
+    n = normalize_text(text)
+    phrases = [
+        "همین ها", "همینا", "همیناست", "همین", "همین کافیه", "کافیه",
+        "تموم", "تمام", "تمومه", "دیگه ندارم", "دیگه نمیخوام", "چیزی نمیخوام",
+        "محصول دیگه نمیخوام", "اضافه نمیخوام", "نهایی", "نهایی کن",
+        "نه", "خیر", "نمیخوام", "نمی خوام", "کلا نمیخوام", "نمیخوام میگم"
+    ]
+    if n in {normalize_text(x) for x in phrases}:
+        return True
+    return any(normalize_text(x) in n for x in ["دیگه نمیخوام", "محصول دیگه نمیخوام", "چیزی اضافه نمیخوام", "همین کافیه", "نهایی کن"])
 
 def is_add_choice(text):
     return fuzzy_any(text, ["اضافه", "بیشتر", "بازم", "یکی دیگه", "محصول دیگه"], 0.68)
@@ -1294,6 +1303,40 @@ def latest_waiting_order(chat_id):
 # ------------------------------------------------------------
 # Intent answers
 # ------------------------------------------------------------
+
+# ------------------------------------------------------------
+# Store-policy questions with high-confidence human-style answers
+# ------------------------------------------------------------
+
+def store_policy_answer(text):
+    n = normalize_text(text)
+
+    # Kids / child sizing. Store policy: kids sizes are available.
+    if any(x in n for x in ["بچگانه", "بچه گانه", "برای بچه", "واسه بچه", "کودک", "نوجوان"]):
+        if any(x in n for x in ["چه سایز", "چه سایزی", "سایزایی", "سایزهای", "سایزش"]):
+            return "آره، سایز بچگانه هم موجود داریم 🌹 برای اینکه دقیق بگم کدوم سایز مناسبشه، قد و وزن بچه رو بفرست."
+        return "بله عزیز، سایز بچگانه هم موجود داریم ✅ برای بچه هم میشه استفاده کرد 🌹"
+
+    # Gender / style. Store policy: sporty and unisex.
+    if any(x in n for x in ["دخترونه", "دخترانه", "پسرونه", "پسرانه", "زنونه", "زنانه", "مردونه", "مردانه", "دختر و پسر"]):
+        return "این کارا اسپرتن و هم برای دختر مناسبه هم پسر ✅🌹"
+    if any(x in n for x in ["اسپرته", "اسپرت هست", "اسپرتن", "کار اسپرت"]):
+        return "بله عزیز، کارا اسپرت هستن و هم دختر می‌تونه استفاده کنه هم پسر ✅🌹"
+
+    # Named-season questions: reply with the exact season the customer named.
+    season_aliases = [
+        (("پاییز", "پاییزی"), "پاییز"),
+        (("زمستون", "زمستان", "زمستونی", "زمستانی"), "زمستون"),
+        (("تابستون", "تابستان", "تابستونی", "تابستانی"), "تابستون"),
+        (("بهار", "بهاری"), "بهار"),
+    ]
+    for aliases, label in season_aliases:
+        if any(alias in n for alias in aliases):
+            return f"بله، برای {label} مناسبه ✅🌹"
+
+    if any(x in n for x in ["کیفیت", "کیفیته", "جنس خوبه", "جنسش خوبه", "دوام"]):
+        return "کیفیت کار به‌شدت بالاست عزیز ✅🌹"
+    return None
 
 def answer_intent(intent, text, chat_id):
     if intent == "greeting":
@@ -1593,6 +1636,20 @@ def handle_business_message(msg, business_owner_id=0):
     smart_categories = detect_categories(text, limit=8)
     core_intents = detect_core_intents(text)
 
+    # High-confidence store-policy questions take precedence over fuzzy intents.
+    policy = store_policy_answer(text)
+    if policy:
+        resume = resume_prompt(state, chat_id) if state else ""
+        send_business(connection_id, chat_id, policy + (f"\n\n{resume}" if resume else ""))
+        return
+
+    # Natural interruption: customer does not know the model name. Do not keep
+    # demanding a number or accidentally interpret «اسم» as size S.
+    ntext = normalize_text(text)
+    if "نمیدونم" in ntext and any(x in ntext for x in ["اسم مدل", "مدلشو", "مدلش", "اسمشو"]):
+        send_business(connection_id, chat_id, "اشکالی نداره 🌹 عکس یا لینک همون کار رو بفرست؛ لازم نیست اسم مدلش رو بدونی.")
+        return
+
     # Several questions in one message: answer up to three without losing checkout state.
     multi = multi_question_answer(text, chat_id)
     if multi and state not in {"await_product_count", "await_item_name", "await_add_count", "await_size", "await_height_weight"}:
@@ -1783,10 +1840,9 @@ def handle_business_message(msg, business_owner_id=0):
         if h and w:
             ans, rec = size_answer(text)
             if rec:
-                update_chat(chat_id, size=rec, state="await_name")
                 send_business(
                     connection_id, chat_id,
-                    ans + f"\n\nمن فعلاً {rec} رو برای سفارشت ثبت کردم. اگه اوکیه، اسم و فامیلی تحویل‌گیرنده رو بفرست."
+                    ans + f"\n\nپیشنهادم {rec} هست؛ {rec} ثبت کنم یا فیت آزادتر/جذب‌تر می‌خوای؟"
                 )
             else:
                 send_business(connection_id, chat_id, ans)
@@ -1812,10 +1868,10 @@ def handle_business_message(msg, business_owner_id=0):
     if state == "await_height_weight":
         ans, rec = size_answer(text)
         if rec:
-            update_chat(chat_id, size=rec, state="await_name")
+            update_chat(chat_id, state="await_size")
             send_business(
                 connection_id, chat_id,
-                ans + f"\n\nفعلاً {rec} رو ثبت کردم. اگه همین خوبه، اسم و فامیلی تحویل‌گیرنده رو بفرست."
+                ans + f"\n\nپیشنهادم {rec} هست؛ {rec} ثبت کنم یا فیت آزادتر/جذب‌تر می‌خوای؟"
             )
         else:
             send_business(connection_id, chat_id, ans)
