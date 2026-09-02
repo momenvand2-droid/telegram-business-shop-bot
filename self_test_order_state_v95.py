@@ -14,7 +14,15 @@ import main as bot
 bot.init_db()
 sent = []
 bot.send_business = lambda connection_id, chat_id, text: sent.append(text)
-bot.send_admin = lambda text: None
+admin_sent = []
+bot.send_admin = lambda text: admin_sent.append(text)
+
+# Admin can configure and inspect the wholesale-order username from Telegram.
+bot.ADMIN_ID = 70001
+bot.handle_admin_message({"chat": {"id": 70001}, "text": "/setwholesale @omde_admin"})
+assert bot.get_setting("wholesale_admin_username") == "@omde_admin"
+bot.handle_admin_message({"chat": {"id": 70001}, "text": "/wholesaleinfo"})
+assert "@omde_admin" in admin_sent[-1]
 
 chat = 95001
 bot.ensure_chat(chat, "biz")
@@ -38,6 +46,17 @@ assert bot.get_chat(chat)["pending_size"] == "L"
 say("همون ام خوبه")
 assert [r["size"] for r in bot.cart_items(chat)] == ["2XL", "L"]
 assert bot.get_chat(chat)["state"] == "await_name"
+
+# Material questions use the product description, and wholesale requests are
+# redirected without being saved as retail order data or changing the state.
+say("جنس محصول چیه؟")
+assert bot.get_chat(chat)["state"] == "await_name"
+assert "توضیحات" in sent[-1] and "فقط مسئول ثبت سفارش" in sent[-1]
+item_count = len(bot.cart_items(chat))
+say("سفارش عمده میخوام")
+assert bot.get_chat(chat)["state"] == "await_name"
+assert len(bot.cart_items(chat)) == item_count
+assert "@omde_admin" in sent[-1]
 
 say("رضا رضا")
 assert bot.get_chat(chat)["state"] == "await_phone"
@@ -78,6 +97,25 @@ sizes = [r[0] for r in conn.execute("SELECT size FROM order_items WHERE order_id
 conn.close()
 assert sizes == ["2XL", "L"]
 assert "6037991234567890" in sent[-1]
+
+# «زدم» means the customer paid; it must never fuzzily trigger edit mode.
+say("زدم")
+assert bot.get_chat(chat)["state"] == "await_receipt"
+assert "عکس رسید" in sent[-1]
+
+# Explicit editing after finalization is blocked to avoid duplicate orders.
+say("ویرایش")
+assert bot.get_chat(chat)["state"] == "await_receipt"
+assert "سفارش نهایی شده" in sent[-1]
+
+# Regression for chats already stuck in the old edit_menu state: answer a side
+# question, then let «هیچ کدوم» return to the receipt step.
+bot.update_chat(chat, state="edit_menu", edit_return_state="")
+say("جنسش چطوره؟")
+assert bot.get_chat(chat)["state"] == "edit_menu"
+assert "کیفیت" in sent[-1] or "جنس" in sent[-1]
+say("هیچ کدوم")
+assert bot.get_chat(chat)["state"] == "await_receipt"
 
 say("کنسل")
 assert bot.get_chat(chat)["state"] == "confirm_cancel"

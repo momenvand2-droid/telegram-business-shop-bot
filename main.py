@@ -863,7 +863,8 @@ def init_db():
             collected_items INTEGER DEFAULT 0,
             misunderstood_count INTEGER DEFAULT 0,
             pending_size TEXT DEFAULT '',
-            cancel_return_state TEXT DEFAULT ''
+            cancel_return_state TEXT DEFAULT '',
+            edit_return_state TEXT DEFAULT ''
         )
     """)
     cols = {row[1] for row in conn.execute("PRAGMA table_info(chats)").fetchall()}
@@ -873,6 +874,7 @@ def init_db():
         "misunderstood_count": "INTEGER DEFAULT 0",
         "pending_size": "TEXT DEFAULT ''",
         "cancel_return_state": "TEXT DEFAULT ''",
+        "edit_return_state": "TEXT DEFAULT ''",
     }
     for col, spec in migrations.items():
         if col not in cols:
@@ -970,6 +972,14 @@ def set_setting(key, value):
     )
     conn.commit()
     conn.close()
+
+def normalize_admin_username(value):
+    raw = (value or "").strip()
+    raw = re.sub(r"^https?://t\.me/", "", raw, flags=re.I)
+    raw = raw.split("?", 1)[0].strip().strip("/").lstrip("@")
+    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", raw):
+        return ""
+    return "@" + raw
 
 def ensure_chat(chat_id, connection_id):
     conn = db()
@@ -1289,6 +1299,24 @@ def is_cancel_request(text):
         normalize_text(x) in n for x in ["سفارش رو لغو", "سفارشم رو لغو", "سفارش رو کنسل"]
     )
 
+def is_edit_request(text):
+    """Require explicit edit language; a bare «زدم» means paid/sent, not edit."""
+    n = normalize_text(text)
+    if n in {normalize_text(x) for x in ["ویرایش", "اصلاح", "تغییر سفارش", "اشتباه زدم"]}:
+        return True
+    if any(x in n for x in ["ویرایش سفارش", "سفارشم رو ویرایش", "اصلاح سفارش", "اشتباه وارد کردم"]):
+        return True
+    fields = ["محصول", "سایز", "نام", "اسم", "موبایل", "شماره", "آدرس", "ادرس"]
+    return any(field in n for field in fields) and any(x in n for x in ["عوض کنم", "تغییر بدم", "اصلاح کنم"])
+
+def is_exit_edit_request(text):
+    n = normalize_text(text)
+    phrases = [
+        "هیچ کدوم", "هیچکدوم", "بیخیال ویرایش", "ویرایش نمیخوام",
+        "نمیخوام ویرایش کنم", "برگرد", "ادامه بده",
+    ]
+    return n in {normalize_text(x) for x in phrases}
+
 def is_affirmative_choice(text):
     n = normalize_text(text)
     phrases = [
@@ -1311,7 +1339,7 @@ def reset_order_state(chat_id):
     update_chat(
         chat_id, state="", product="", size="", full_name="", phone="", address="",
         last_price=0, expected_items=0, collected_items=0, misunderstood_count=0,
-        pending_size="", cancel_return_state="",
+        pending_size="", cancel_return_state="", edit_return_state="",
     )
 
 def cancel_latest_waiting_order(chat_id):
@@ -1353,6 +1381,15 @@ def continue_checkout(chat_id):
     update_chat(chat_id, state=state, pending_size="")
     return state
 
+def edit_return_target(chat_id):
+    c = get_chat(chat_id)
+    if c["edit_return_state"]:
+        return c["edit_return_state"]
+    # Compatibility for chats already left in edit_menu by the prior version.
+    if latest_waiting_order(chat_id):
+        return "await_receipt"
+    return next_checkout_state(chat_id)
+
 def start_order(chat_id):
     clear_cart(chat_id)
     update_chat(
@@ -1369,6 +1406,7 @@ def start_order(chat_id):
         misunderstood_count=0,
         pending_size="",
         cancel_return_state="",
+        edit_return_state="",
     )
 
 def payment_text():
@@ -1442,6 +1480,31 @@ def latest_waiting_order(chat_id):
 # ------------------------------------------------------------
 # Store-policy questions with high-confidence human-style answers
 # ------------------------------------------------------------
+
+def is_wholesale_request(text):
+    return "عمده" in normalize_text(text)
+
+def wholesale_redirect_answer():
+    username = get_setting("wholesale_admin_username")
+    if username:
+        return (
+            "من فقط سفارش تکی ثبت می‌کنم 🌹 برای سفارش عمده لطفاً مستقیم به مسئول ثبت سفارش عمده پیام بده:\n"
+            f"{username}"
+        )
+    return (
+        "من فقط سفارش تکی ثبت می‌کنم 🌹 ثبت سفارش عمده از طریق ادمین عمده انجام می‌شه؛ "
+        "لطفاً برای دریافت آیدی مسئول عمده به ادمین فروشگاه پیام بده."
+    )
+
+def is_material_question(text):
+    n = normalize_text(text)
+    return any(word in n for word in ["جنس", "پارچه", "پارچش", "گرماژ"])
+
+def material_description_answer():
+    return (
+        "جنس و مشخصات محصول داخل بخش توضیحات همون محصول در پیج نوشته شده عزیز 🌹 "
+        "من فقط مسئول ثبت سفارش هستم."
+    )
 
 def store_policy_answer(text):
     n = normalize_text(text)
@@ -1580,6 +1643,24 @@ def handle_admin_message(msg):
             api("sendMessage", {"chat_id": chat_id, "text": "این بخش فقط برای مدیر فروشگاه فعاله."})
         return
 
+    if text.startswith("/setwholesale"):
+        raw = text.replace("/setwholesale", "", 1).strip()
+        username = normalize_admin_username(raw)
+        if not username:
+            send_admin("فرمت درست:\n/setwholesale @username\nمثال: /setwholesale @omde_admin")
+            return
+        set_setting("wholesale_admin_username", username)
+        send_admin(f"✅ آیدی مسئول سفارش عمده ثبت شد:\n{username}")
+        return
+
+    if text == "/wholesaleinfo":
+        username = get_setting("wholesale_admin_username")
+        if username:
+            send_admin(f"آیدی فعلی مسئول سفارش عمده:\n{username}")
+        else:
+            send_admin("هنوز آیدی مسئول عمده تنظیم نشده.\n/setwholesale @username")
+        return
+
     if text.startswith("/changecard") or text.startswith("/setpayment"):
         command = "/changecard" if text.startswith("/changecard") else "/setpayment"
         raw = text.replace(command, "", 1).strip()
@@ -1682,6 +1763,8 @@ def handle_admin_message(msg):
             "/setholder نام صاحب کارت\n"
             "/cardinfo\n"
             "/deletecards  ← حذف پیام‌های قبلی کارت از چت مشتری‌ها\n"
+            "/setwholesale @username  ← ثبت آیدی مسئول عمده\n"
+            "/wholesaleinfo  ← نمایش آیدی مسئول عمده\n"
             "/orders\n"
             "/pause CHAT_ID\n/resume CHAT_ID\n/resetprices CHAT_ID"
         )
@@ -1729,6 +1812,7 @@ def handle_business_message(msg, business_owner_id=0):
             ).fetchall()
             conn.commit()
             conn.close()
+            update_chat(chat_id, state="", pending_size="", cancel_return_state="", edit_return_state="")
 
             send_business(
                 connection_id, chat_id,
@@ -1797,9 +1881,38 @@ def handle_business_message(msg, business_owner_id=0):
         send_business(connection_id, chat_id, "مطمئنی می‌خوای کل سفارش لغو بشه؟\nبگو «بله لغو کن» یا «نه ادامه بده».")
         return
 
+    # Wholesale requests are never added to the retail checkout. Keep any
+    # unfinished retail state intact and redirect the customer to its admin.
+    if is_wholesale_request(text):
+        send_business(connection_id, chat_id, wholesale_redirect_answer())
+        return
+
+    # Product material/specification is intentionally sourced from the product
+    # description on the shop page; this bot only registers orders.
+    if is_material_question(text):
+        resume = resume_prompt(state, chat_id) if state else ""
+        answer = material_description_answer()
+        send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
+        return
+
     # Small, state-local edit menu. Product editing restarts only the cart;
     # other fields are changed in place and return to the right checkout step.
     if state == "edit_menu":
+        if is_exit_edit_request(text):
+            new_state = edit_return_target(chat_id)
+            update_chat(chat_id, state=new_state, edit_return_state="")
+            send_business(connection_id, chat_id, "باشه، چیزی ویرایش نشد 👌\n\n" + checkout_prompt(chat_id, new_state))
+            return
+
+        # A normal shop question inside the edit menu must be answered first,
+        # then the customer is returned to the same menu.
+        edit_policy = store_policy_answer(text)
+        edit_cat = next((cat for cat in smart_categories if cat in QUESTIONISH), None)
+        if looks_like_question(text) and (edit_policy or edit_cat):
+            answer = edit_policy or answer_category(edit_cat, text, chat_id)
+            send_business(connection_id, chat_id, answer + "\n\n" + resume_prompt("edit_menu", chat_id))
+            return
+
         if any(x in ntext for x in ["محصول", "سبد", "کالا"]):
             start_order(chat_id)
             send_business(connection_id, chat_id, "باشه، محصولات قبلی پاک شد تا سبد رو دقیق از نو بچینیم. چند محصول می‌خوای؟ از ۱ تا ۵۰.")
@@ -1817,8 +1930,8 @@ def handle_business_message(msg, business_owner_id=0):
             update_chat(chat_id, state="edit_address")
             send_business(connection_id, chat_id, "آدرس کامل درست رو بفرست؛ شهر، خیابون، کوچه و پلاک.")
         elif any(x in ntext for x in ["ادامه", "برگرد", "هیچی"]):
-            new_state = next_checkout_state(chat_id)
-            update_chat(chat_id, state=new_state)
+            new_state = edit_return_target(chat_id)
+            update_chat(chat_id, state=new_state, edit_return_state="")
             send_business(connection_id, chat_id, checkout_prompt(chat_id, new_state))
         else:
             send_business(connection_id, chat_id, "کدوم بخش ویرایش بشه؟ «محصولات»، «سایز»، «نام»، «موبایل» یا «آدرس».")
@@ -1830,7 +1943,7 @@ def handle_business_message(msg, business_owner_id=0):
             return
         update_chat(chat_id, full_name=text.strip())
         new_state = next_checkout_state(chat_id)
-        update_chat(chat_id, state=new_state)
+        update_chat(chat_id, state=new_state, edit_return_state="")
         send_business(connection_id, chat_id, "نام اصلاح شد ✅\n\n" + checkout_prompt(chat_id, new_state))
         return
 
@@ -1841,7 +1954,7 @@ def handle_business_message(msg, business_owner_id=0):
             return
         update_chat(chat_id, phone=phone)
         new_state = next_checkout_state(chat_id)
-        update_chat(chat_id, state=new_state)
+        update_chat(chat_id, state=new_state, edit_return_state="")
         send_business(connection_id, chat_id, "شماره موبایل اصلاح شد ✅\n\n" + checkout_prompt(chat_id, new_state))
         return
 
@@ -1851,12 +1964,18 @@ def handle_business_message(msg, business_owner_id=0):
             return
         update_chat(chat_id, address=text.strip())
         new_state = next_checkout_state(chat_id)
-        update_chat(chat_id, state=new_state)
+        update_chat(chat_id, state=new_state, edit_return_state="")
         send_business(connection_id, chat_id, "آدرس اصلاح شد ✅\n\n" + checkout_prompt(chat_id, new_state))
         return
 
-    if state and ("edit_order" in smart_categories or ntext in {"ویرایش", "اصلاح", "تغییر سفارش"}):
-        update_chat(chat_id, state="edit_menu")
+    if state and is_edit_request(text):
+        if state == "await_receipt":
+            send_business(
+                connection_id, chat_id,
+                "سفارش نهایی شده و شماره کارت ارسال شده. برای جلوگیری از ثبت سفارش تکراری، اگر می‌خوای تغییرش بدی اول بنویس «کنسل»؛ بعد از تأیید لغو، سفارش جدید رو ثبت می‌کنیم."
+            )
+            return
+        update_chat(chat_id, state="edit_menu", edit_return_state=state)
         send_business(connection_id, chat_id, "حتماً 👌 کدوم بخش سفارش رو ویرایش کنیم؟\nمحصولات، سایز، نام، موبایل یا آدرس؟")
         return
 
