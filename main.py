@@ -290,7 +290,8 @@ INTENTS = {
     "dont_know": ["نمیدونم", "نمی دونم", "اطلاع ندارم", "بلد نیستم", "نمدونم"],
     "thanks": ["مرسی", "ممنون", "دمت گرم", "تشکر", "سپاس"],
     "bye": ["خدافظ", "خداحافظ", "فعلا", "بای", "روز خوش"],
-    "order": ["ثبت سفارش", "سفارش میخوام", "میخوام بخرم", "خرید کنم", "سفارش", "بخرم"],
+    "order": ["ثبت سفارش", "سفارش میخوام", "میخوام بخرم", "خرید کنم", "سفارش", "بخرم",
+              "میخوام همونو", "همونو میخوام", "همین رو میخوام", "اینو میخوام"],
     "price": ["قیمت چنده", "چنده", "قیمت", "چقدر قیمت", "تومن", "تومان"],
     "price_difference": ["چرا قیمت پیج فرق", "قیمت داخل پیج فرق", "پیج ارزونتر", "پیج گرونتر"],
     "low_price": ["چرا قیمتاتون پایینه", "چرا ارزونه", "چرا قیمت پایین", "چرا انقدر ارزونه"],
@@ -362,7 +363,8 @@ SMART_CATEGORY_PHRASES = {
     "between_sizes": ["بین دو سایز", "بین لارج و ایکس", "کدوم سایز بهتره"],
     "size_chart": ["جدول سایز", "اندازه ها", "اندازه سایزها", "سایز چارت"],
     "fabric": ["جنس", "پارچه", "جنسش", "چه جنسی"],
-    "quality": ["کیفیت", "کیفیته", "خوبه", "جنس خوبه", "دوام"],
+    # «خوبه» به تنهایی سؤال کیفیت نیست؛ ممکن است تأیید یا بخشی از فرم باشد.
+    "quality": ["کیفیت", "کیفیته", "جنس خوبه", "کیفیتش خوبه", "دوام"],
     "thickness": ["ضخیم", "نازک", "ضخامت", "گرماژ"],
     "stretch": ["کشی", "کش میاد", "کشسان"],
     "lining": ["کرکی", "داخل کرک", "تو کرک"],
@@ -378,7 +380,8 @@ SMART_CATEGORY_PHRASES = {
     "real_photo": ["عکس واقعی", "عکس خود کار", "عکس رئال"],
     "video": ["ویدیو", "ویدئو", "فیلم", "فیلمشو"],
     "model_photo": ["تنخور", "تن خور", "روی تن", "عکس تن"],
-    "order": ["سفارش", "ثبت سفارش", "بخرم", "میخوامش", "خرید"],
+    "order": ["سفارش", "ثبت سفارش", "بخرم", "میخوامش", "میخوام همونو", "همونو میخوام",
+              "همین رو میخوام", "اینو میخوام", "خرید"],
     "add_item": ["اضافه کن", "یکی دیگه", "اینم اضافه", "یه کار دیگه"],
     "remove_item": ["حذف کن", "نمیخوامش", "بردارش", "این رو نمیخوام"],
     "edit_order": ["ویرایش", "عوض کنم", "تغییر سفارش", "اشتباه زدم"],
@@ -452,9 +455,7 @@ def looks_like_question(text):
     question_phrases = [
         "چه رنگ", "چه سایز", "می شه", "میخوام بدونم",
         "قیمت", "هزینه", "ارسال", "پست", "تعویض", "مرجوع",
-        "اورجینال", "اصله", "فیکه", "چیه", "چطوره",
-        "داره", "دارن", "هست", "هستن", "مناسبه", "میاد",
-        "میده", "میشه", "خوبه"
+        "اورجینال", "اصله", "فیکه"
     ]
     if any(smart_normalize(q) in n for q in question_phrases):
         return True
@@ -594,9 +595,9 @@ def state_explanation(state):
         "await_name": "برای ثبت سفارش فقط اسم و فامیلی تحویل‌گیرنده رو لازم دارم.",
         "await_phone": "شماره موبایل گیرنده رو برای اطلاعات سفارش و ارسال لازم دارم؛ مثل 09123456789.",
         "await_address": "الان آدرس ارسال رو لازم دارم؛ شهر، خیابون و پلاک رو بنویس. کدپستی اگر داری بهتره.",
-        "confirm_order": "همه اطلاعات آماده است؛ فقط تأیید نهایی، ویرایش یا کنسل‌کردن سفارش مونده.",
-        "confirm_cancel": "برای امنیت سفارش منتظر تأیید تو هستم؛ فقط بگو «بله، کنسل کن» یا «نه».",
-        "edit_menu": "داریم سفارش رو ویرایش می‌کنیم؛ بخش موردنظر رو از فهرست انتخاب کن.",
+        "confirm_order": "اطلاعات سفارش کامل شده؛ فقط تأیید نهایی تو مونده. بنویس «تأیید» یا «ویرایش».",
+        "confirm_cancel": "پرسیدم آیا کل سفارش لغو بشه. بنویس «بله لغو کن» یا «نه ادامه بده».",
+        "edit_menu": "بگو کدوم بخش سفارش اصلاح بشه: محصولات، سایز، نام، موبایل یا آدرس.",
         "await_receipt": "سفارش ثبت شده و الان منتظر عکس رسید واریز هستم. اگه سوالی داری قبلش بپرس.",
     }
     return mapping.get(state, "بگو دقیقاً کدوم بخش رو می‌خوای توضیح بدم تا ساده بگم.")
@@ -615,7 +616,7 @@ def resume_prompt(state, chat_id):
         remaining = MAX_ITEMS_PER_ORDER - cart_unit_count(chat_id)
         return f"برای ادامه تعداد محصول‌های جدید رو بگو؛ حداکثر {remaining} عدد."
     if state == "await_size":
-        return size_request_prompt(chat_id, "برای ادامه")
+        return "برای ادامه سایزها رو بگو؛ اگر نمی‌دونی بنویس «نمیدونم» تا با قد و وزن راهنماییت کنم."
     if state == "await_height_weight":
         return "قد و وزنت رو بفرست؛ مثلاً «قد 180 وزن 80»."
     if state == "await_name":
@@ -625,11 +626,9 @@ def resume_prompt(state, chat_id):
     if state == "await_address":
         return "برای ادامه آدرس کامل ارسال رو بفرست."
     if state == "confirm_order":
-        return "برای ادامه بنویس «تأیید نهایی» یا «ویرایش سفارش»."
-    if state == "confirm_cancel":
-        return "برای کنسل‌شدن کامل سفارش بنویس «بله»؛ برای برگشت بنویس «نه»."
+        return "اگر اطلاعات درسته بنویس «تأیید»؛ اگر نه بنویس «ویرایش»."
     if state == "edit_menu":
-        return edit_menu_text()
+        return "برای ویرایش یکی رو بگو: محصولات، سایز، نام، موبایل یا آدرس."
     if state == "await_receipt":
         return "هر وقت واریز کردی، عکس رسید رو همینجا بفرست."
     return ""
@@ -695,9 +694,9 @@ def extract_explicit_size(text):
     """
     raw = unicodedata.normalize("NFKC", text or "").upper().replace(" ", "")
     patterns = [
-        (r"4XL|XXXXL", "4XL"),
-        (r"3XL|XXXL", "3XL"),
-        (r"2XL|XXL", "2XL"),
+        (r"4XL|4X|XXXXL", "4XL"),
+        (r"3XL|3X|XXXL", "3XL"),
+        (r"2XL|2X|XXL", "2XL"),
         (r"XL", "XL"),
     ]
     for pat, code in patterns:
@@ -770,7 +769,10 @@ def recommend_size(height, weight, fit="regular", product_type="generic"):
         size = "4XL"
 
     # Height can change torso/sleeve length needs, but should not dominate weight.
-    if height >= 190 and weight >= 70:
+    if height >= 185 and size in {"S", "M"}:
+        # قد بلند حتی با وزن پایین، برای قد لباس و آستین حداقل L می‌خواهد.
+        size = "L"
+    elif height >= 190 and weight >= 70:
         size = shift_size(size, 1)
     elif height <= 162 and weight < 70:
         size = shift_size(size, -1)
@@ -860,9 +862,8 @@ def init_db():
             expected_items INTEGER DEFAULT 0,
             collected_items INTEGER DEFAULT 0,
             misunderstood_count INTEGER DEFAULT 0,
-            previous_state TEXT DEFAULT '',
-            edit_target INTEGER DEFAULT 0,
-            pending_size TEXT DEFAULT ''
+            pending_size TEXT DEFAULT '',
+            cancel_return_state TEXT DEFAULT ''
         )
     """)
     cols = {row[1] for row in conn.execute("PRAGMA table_info(chats)").fetchall()}
@@ -870,9 +871,8 @@ def init_db():
         "expected_items": "INTEGER DEFAULT 0",
         "collected_items": "INTEGER DEFAULT 0",
         "misunderstood_count": "INTEGER DEFAULT 0",
-        "previous_state": "TEXT DEFAULT ''",
-        "edit_target": "INTEGER DEFAULT 0",
         "pending_size": "TEXT DEFAULT ''",
+        "cancel_return_state": "TEXT DEFAULT ''",
     }
     for col, spec in migrations.items():
         if col not in cols:
@@ -1171,7 +1171,7 @@ def add_cart_item(chat_id, product_name, quantity=1):
     price = get_or_create_product_price(chat_id, product_name)
     conn = db()
     conn.execute(
-        "INSERT INTO cart_items(chat_id,position,product_name,price,quantity,size) VALUES(?,?,?,?,?,'')",
+        "INSERT INTO cart_items(chat_id,position,product_name,price,quantity) VALUES(?,?,?,?,?)",
         (chat_id, position, product_name.strip(), price, quantity)
     )
     conn.commit()
@@ -1179,14 +1179,8 @@ def add_cart_item(chat_id, product_name, quantity=1):
     update_chat(chat_id, collected_items=position)
     return position, price, quantity
 
-
-def cart_item(chat_id, position):
-    return next((r for r in cart_items(chat_id) if int(r["position"]) == int(position)), None)
-
-
-def next_unsized_cart_item(chat_id):
+def next_unsized_item(chat_id):
     return next((r for r in cart_items(chat_id) if not r["size"]), None)
-
 
 def set_cart_item_size(chat_id, position, size):
     conn = db()
@@ -1197,87 +1191,11 @@ def set_cart_item_size(chat_id, position, size):
     conn.commit()
     conn.close()
 
-
-def sync_chat_size_summary(chat_id):
-    parts = [f"{r['product_name']}: {r['size']}" for r in cart_items(chat_id) if r["size"]]
-    update_chat(chat_id, size=" | ".join(parts))
-
-
-def size_request_prompt(chat_id, prefix=""):
-    item = next_unsized_cart_item(chat_id)
-    if not item:
-        return (prefix + " " if prefix else "") + "همه سایزها ثبت شدن ✅ حالا اسم و فامیلی تحویل‌گیرنده رو بفرست."
-    qty = int(item["quantity"])
-    qty_text = f" برای هر {qty} عدد" if qty > 1 else ""
-    lead = (prefix + "\n\n") if prefix else ""
-    return (
-        f"{lead}سایز «{item['product_name']}»{qty_text} رو بگو؛ "
-        "S، M، L، XL، 2XL، 3XL یا 4XL. اگر نمی‌دونی بنویس «نمیدونم»."
-    )
-
-
-def save_current_product_size(chat_id, size):
-    item = next_unsized_cart_item(chat_id)
-    if not item:
-        update_chat(chat_id, size=size, state="await_name", pending_size="")
-        return None
-    set_cart_item_size(chat_id, item["position"], size)
-    sync_chat_size_summary(chat_id)
-    update_chat(chat_id, pending_size="")
-    next_item = next_unsized_cart_item(chat_id)
-    if not next_item:
-        update_chat(chat_id, state="await_name")
-    return next_item
-
-
-def numbered_cart(chat_id):
-    rows = cart_items(chat_id)
-    if not rows:
-        return "سبد سفارش خالیه."
-    return "\n".join(
-        f"{r['position']}) {r['product_name']} × {r['quantity']}"
-        + (f" — سایز {r['size']}" if r["size"] else "")
-        for r in rows
-    )
-
-
-def delete_cart_item(chat_id, position):
+def clear_cart_sizes(chat_id):
     conn = db()
-    cur = conn.execute(
-        "DELETE FROM cart_items WHERE chat_id=? AND position=?", (chat_id, int(position))
-    )
-    if cur.rowcount:
-        rows = conn.execute(
-            "SELECT id FROM cart_items WHERE chat_id=? ORDER BY position", (chat_id,)
-        ).fetchall()
-        for new_position, row in enumerate(rows, 1):
-            conn.execute("UPDATE cart_items SET position=? WHERE id=?", (new_position, row["id"]))
+    conn.execute("UPDATE cart_items SET size='' WHERE chat_id=?", (chat_id,))
     conn.commit()
     conn.close()
-    if cur.rowcount:
-        update_chat(chat_id, collected_items=len(cart_items(chat_id)))
-        sync_chat_size_summary(chat_id)
-    return bool(cur.rowcount)
-
-
-def update_cart_quantity(chat_id, position, quantity):
-    item = cart_item(chat_id, position)
-    if not item:
-        return False, "محصول پیدا نشد."
-    quantity = int(quantity)
-    if quantity < 1:
-        return False, "تعداد باید حداقل ۱ باشه."
-    new_total = cart_unit_count(chat_id) - int(item["quantity"]) + quantity
-    if new_total > MAX_ITEMS_PER_ORDER:
-        return False, "جمع تعداد محصولات نباید بیشتر از ۵۰ تا بشه."
-    conn = db()
-    conn.execute(
-        "UPDATE cart_items SET quantity=? WHERE chat_id=? AND position=?",
-        (quantity, chat_id, int(position)),
-    )
-    conn.commit()
-    conn.close()
-    return True, ""
 
 def cart_subtotal(chat_id):
     return sum(int(r["price"]) * int(r["quantity"]) for r in cart_items(chat_id))
@@ -1293,12 +1211,12 @@ def cart_summary(chat_id):
     for r in rows:
         qty = int(r["quantity"])
         unit = int(r["price"])
-        size_text = f" | سایز {r['size']}" if r["size"] else ""
+        size_note = f" | سایز {r['size']}" if r["size"] else ""
         if qty == 1:
-            lines.append(f"• {r['product_name']}{size_text} — حدود {fmt_price(unit)}")
+            lines.append(f"• {r['product_name']}{size_note} — حدود {fmt_price(unit)}")
         else:
             lines.append(
-                f"• {r['product_name']} × {qty}{size_text} — هر عدد حدود {fmt_price(unit)} "
+                f"• {r['product_name']} × {qty}{size_note} — هر عدد حدود {fmt_price(unit)} "
                 f"(جمع {fmt_price(unit * qty)})"
             )
     lines.append("")
@@ -1361,256 +1279,79 @@ def is_done_choice(text):
 def is_add_choice(text):
     return fuzzy_any(text, ["اضافه", "بیشتر", "بازم", "یکی دیگه", "محصول دیگه"], 0.68)
 
-
-def is_cancel_order_request(text):
-    """Detect only explicit whole-order cancellation requests.
-
-    Short answers such as «نه» and «نمیخوام» keep their existing meaning in
-    cart confirmation and must not cancel the entire checkout accidentally.
-    """
+def is_cancel_request(text):
     n = normalize_text(text)
-    if not n:
-        return False
     exact = {
-        "لغو", "کنسل", "لغو سفارش", "کنسل سفارش", "لغوش کن", "کنسلش کن",
-        "سفارشمو لغو کن", "سفارشم رو لغو کن",
-        "سفارشمو کنسل کن", "سفارشم رو کنسل کن",
-        "بیخیال سفارش", "از سفارش منصرف شدم", "از خریدم منصرف شدم",
-        "کلا سفارش نمیخوام", "دیگه سفارش نمیخوام", "نمیخوام سفارش بدم",
+        "نمیخوام", "نمی خوام", "لغو", "لغوش کن", "لغو کن", "کنسل", "کنسلش کن",
+        "سفارش نمیخوام", "سفارشم رو نمیخوام", "بیخیال", "بیخیال سفارش",
     }
-    if n in {normalize_text(x) for x in exact}:
-        return True
-    cancel_words = ("لغو", "کنسل", "منصرف", "بیخیال")
-    order_words = ("سفارش", "سفارشم", "سفارشمو", "خرید", "خریدم")
-    action_words = {"کن", "کنید", "میکنم", "میخوام", "شدم", "بشه"}
-    tokens = set(n.split())
-    return (
-        any(word in n for word in cancel_words)
-        and any(word in n for word in order_words)
-        and bool(tokens & action_words)
+    return n in {normalize_text(x) for x in exact} or any(
+        normalize_text(x) in n for x in ["سفارش رو لغو", "سفارشم رو لغو", "سفارش رو کنسل"]
     )
 
-
-def is_yes_choice(text):
+def is_affirmative_choice(text):
     n = normalize_text(text)
-    return n in {"بله", "آره", "اره", "اوکی", "تایید", "تأیید", "مطمئنم", "انجامش بده"}
-
-
-def is_no_choice(text):
-    n = normalize_text(text)
-    return n in {"نه", "خیر", "نخیر", "نکن", "بیخیال", "لغو نکن", "کنسل نکن"}
-
-
-def edit_request_kind(text):
-    n = normalize_text(text)
-    edit_words = ("ویرایش", "تغییر", "عوض", "اصلاح", "اشتباه")
-    remove_words = ("حذف", "بردار", "نمیخوامش")
-    if any(word in n for word in remove_words) and any(word in n for word in ("محصول", "لباس", "هودی", "تیشرت", "شلوار", "این")):
-        return "remove"
-    if not any(word in n for word in edit_words):
-        return None
-    if any(word in n for word in ("آدرس", "ادرس")):
-        return "address"
-    if any(word in n for word in ("شماره", "موبایل", "تلفن")):
-        return "phone"
-    if "سایز" in n:
-        return "size"
-    if any(word in n for word in ("تعداد", "چندتا", "چند تا")):
-        return "quantity"
-    if any(word in n for word in ("اسم", "نام")):
-        return "name"
-    if any(word in n for word in ("سفارش", "سفارشم", "خرید")) or n in {"ویرایش", "تغییرش بده", "اشتباه زدم"}:
-        return "menu"
-    return None
-
-
-def edit_menu_text():
-    return (
-        "کدوم بخش سفارش رو می‌خوای ویرایش کنی؟ 🌹\n"
-        "1) حذف محصول\n2) تغییر تعداد\n3) تغییر سایز\n"
-        "4) تغییر نام گیرنده\n5) تغییر شماره موبایل\n6) تغییر آدرس\n"
-        "شماره گزینه یا اسم بخش رو بفرست."
+    phrases = [
+        "بله", "آره", "اره", "اوکی", "تایید", "تأیید", "ثبت کن",
+        "همون خوبه", "همونم خوبه", "همون ام خوبه",
+    ]
+    return n in {normalize_text(x) for x in phrases} or any(
+        normalize_text(x) in n for x in ["بله لغو", "آره لغو", "لغوش کن", "تایید میکنم", "تایید نهایی", "تأیید نهایی", "همون خوبه"]
     )
 
-
-def edit_menu_choice(text):
+def is_negative_choice(text):
     n = normalize_text(text)
-    direct = {"1":"remove", "2":"quantity", "3":"size", "4":"name", "5":"phone", "6":"address"}
-    if n in direct:
-        return direct[n]
-    if "حذف" in n or "بردار" in n:
-        return "remove"
-    if "تعداد" in n:
-        return "quantity"
-    if "سایز" in n:
-        return "size"
-    if "اسم" in n or "نام" in n:
-        return "name"
-    if "شماره" in n or "موبایل" in n:
-        return "phone"
-    if "آدرس" in n or "ادرس" in n:
-        return "address"
-    return None
-
-
-def begin_edit(chat_id, current_state, kind="menu"):
-    update_chat(chat_id, previous_state=current_state, edit_target=0, pending_size="")
-    if kind == "name":
-        update_chat(chat_id, state="edit_name")
-        return "اسم و فامیلی جدید گیرنده رو بفرست."
-    if kind == "phone":
-        update_chat(chat_id, state="edit_phone")
-        return "شماره موبایل جدید گیرنده رو بفرست."
-    if kind == "address":
-        update_chat(chat_id, state="edit_address")
-        return "آدرس کامل جدید رو بفرست؛ شهر، خیابون و پلاک."
-    if kind in {"remove", "quantity", "size"}:
-        state_map = {
-            "remove":"edit_remove", "quantity":"edit_quantity_target", "size":"edit_size_target"
-        }
-        action = {"remove":"حذف", "quantity":"تغییر تعداد", "size":"تغییر سایز"}[kind]
-        update_chat(chat_id, state=state_map[kind])
-        return f"شماره محصولی که می‌خوای {action} بدی رو بفرست:\n{numbered_cart(chat_id)}"
-    update_chat(chat_id, state="edit_menu")
-    return edit_menu_text()
-
-
-def finish_edit(chat_id):
-    c = get_chat(chat_id)
-    target_state = c["previous_state"] or "confirm_order"
-    if not cart_items(chat_id):
-        target_state = "await_product_count"
-    update_chat(chat_id, state=target_state, previous_state="", edit_target=0, pending_size="")
-    return target_state
-
-
-def order_review_text(chat_id, heading="لطفاً سفارش رو یک بار بررسی کن 👇"):
-    c = get_chat(chat_id)
-    return (
-        f"{heading}\n\n{cart_summary(chat_id)}\n\n"
-        f"نام گیرنده: {c['full_name']}\n"
-        f"موبایل: {c['phone']}\n"
-        f"آدرس: {c['address']}\n\n"
-        "اگر همه‌چیز درسته بنویس «تأیید نهایی». برای تغییر بنویس «ویرایش سفارش»؛ "
-        "برای لغو هم بنویس «کنسل سفارش»."
+    phrases = ["نه", "خیر", "ادامه", "ادامه بده", "نه ادامه بده", "لغو نکن", "کنسل نکن"]
+    return n in {normalize_text(x) for x in phrases} or any(
+        normalize_text(x) in n for x in ["ادامه بده", "لغو نکن", "کنسل نکن"]
     )
 
+def reset_order_state(chat_id):
+    clear_cart(chat_id)
+    update_chat(
+        chat_id, state="", product="", size="", full_name="", phone="", address="",
+        last_price=0, expected_items=0, collected_items=0, misunderstood_count=0,
+        pending_size="", cancel_return_state="",
+    )
 
-def edit_done_text(chat_id, detail):
-    restored = finish_edit(chat_id)
-    if restored == "confirm_order":
-        return order_review_text(chat_id, detail + " ✅ حالا دوباره بررسی کن:")
-    return detail + " ✅\n\n" + resume_prompt(restored, chat_id)
-
-
-def process_edit_state(chat_id, state, text):
-    """Return (handled, reply) for the small, isolated order-edit state machine."""
-    if state == "edit_menu":
-        choice = edit_menu_choice(text)
-        if not choice:
-            return True, edit_menu_text()
-        previous = get_chat(chat_id)["previous_state"] or "confirm_order"
-        # Keep the original resume target while changing edit sub-states.
-        if choice in {"name", "phone", "address"}:
-            state_map = {"name":"edit_name", "phone":"edit_phone", "address":"edit_address"}
-            prompts = {
-                "name":"اسم و فامیلی جدید گیرنده رو بفرست.",
-                "phone":"شماره موبایل جدید گیرنده رو بفرست.",
-                "address":"آدرس کامل جدید رو بفرست؛ شهر، خیابون و پلاک.",
-            }
-            update_chat(chat_id, state=state_map[choice], previous_state=previous)
-            return True, prompts[choice]
-        state_map = {"remove":"edit_remove", "quantity":"edit_quantity_target", "size":"edit_size_target"}
-        action = {"remove":"حذف", "quantity":"تغییر تعداد", "size":"تغییر سایز"}[choice]
-        update_chat(chat_id, state=state_map[choice], previous_state=previous)
-        return True, f"شماره محصولی که می‌خوای {action} بدی رو بفرست:\n{numbered_cart(chat_id)}"
-
-    if state in {"edit_remove", "edit_quantity_target", "edit_size_target"}:
-        position = parse_count(text)
-        item = cart_item(chat_id, position) if position is not None else None
-        if not item:
-            return True, "شماره محصول درست نبود. یکی از شماره‌های این لیست رو بفرست:\n" + numbered_cart(chat_id)
-        if state == "edit_remove":
-            name = item["product_name"]
-            delete_cart_item(chat_id, position)
-            return True, edit_done_text(chat_id, f"«{name}» از سفارش حذف شد")
-        next_state = "edit_quantity_value" if state == "edit_quantity_target" else "edit_size_value"
-        update_chat(chat_id, state=next_state, edit_target=int(position))
-        prompt = "تعداد جدید رو با عدد بفرست." if next_state == "edit_quantity_value" else "سایز جدید رو بفرست؛ S تا 4XL."
-        return True, f"«{item['product_name']}» انتخاب شد. {prompt}"
-
-    if state == "edit_quantity_value":
-        count = parse_count(text)
-        if count is None:
-            return True, "تعداد جدید رو فقط با عدد بفرست؛ مثلاً «2»."
-        c = get_chat(chat_id)
-        ok, error = update_cart_quantity(chat_id, c["edit_target"], count)
-        if not ok:
-            return True, error
-        return True, edit_done_text(chat_id, f"تعداد محصول روی {count} عدد تنظیم شد")
-
-    if state == "edit_size_value":
-        chosen = extract_explicit_size(text)
-        if not chosen:
-            return True, "سایز جدید رو دقیق بفرست؛ S، M، L، XL، 2XL، 3XL یا 4XL."
-        c = get_chat(chat_id)
-        set_cart_item_size(chat_id, c["edit_target"], chosen)
-        sync_chat_size_summary(chat_id)
-        return True, edit_done_text(chat_id, f"سایز محصول روی {chosen} تنظیم شد")
-
-    if state == "edit_name":
-        if not valid_name(text):
-            return True, "اسم و فامیلی جدید رو کامل بفرست؛ مثلاً «علی رضایی»."
-        update_chat(chat_id, full_name=text.strip())
-        return True, edit_done_text(chat_id, "نام گیرنده تغییر کرد")
-
-    if state == "edit_phone":
-        phone = extract_phone(text)
-        if not phone:
-            return True, "شماره جدید باید ۱۱ رقم و با 09 شروع بشه."
-        update_chat(chat_id, phone=phone)
-        return True, edit_done_text(chat_id, "شماره موبایل تغییر کرد")
-
-    if state == "edit_address":
-        if not valid_address(text):
-            return True, "آدرس جدید رو کامل‌تر بفرست؛ شهر، خیابون و پلاک."
-        update_chat(chat_id, address=text.strip())
-        return True, edit_done_text(chat_id, "آدرس ارسال تغییر کرد")
-
-    return False, ""
-
-
-def cancel_current_order(chat_id):
-    """Atomically cancel checkout/order data while preserving price history."""
+def cancel_latest_waiting_order(chat_id):
     conn = db()
-    chat = conn.execute("SELECT state FROM chats WHERE chat_id=?", (chat_id,)).fetchone()
-    cart_count = conn.execute(
-        "SELECT COUNT(*) AS n FROM cart_items WHERE chat_id=?", (chat_id,)
-    ).fetchone()["n"]
-    order = conn.execute(
-        "SELECT id FROM orders WHERE chat_id=? AND status IN ('awaiting_receipt','receipt_sent') "
-        "ORDER BY id DESC LIMIT 1",
+    row = conn.execute(
+        "SELECT id FROM orders WHERE chat_id=? AND status='awaiting_receipt' ORDER BY id DESC LIMIT 1",
         (chat_id,),
     ).fetchone()
-    had_active = bool((chat and chat["state"]) or cart_count or order)
-    order_id = int(order["id"]) if order else None
-    if order_id:
-        conn.execute(
-            "UPDATE orders SET status='cancelled_by_customer' WHERE id=?",
-            (order_id,),
-        )
-    conn.execute("DELETE FROM cart_items WHERE chat_id=?", (chat_id,))
-    conn.execute(
-        "UPDATE chats SET state='',product='',size='',full_name='',phone='',address='',"
-        "last_price=0,expected_items=0,collected_items=0,misunderstood_count=0,"
-        "previous_state='',edit_target=0,pending_size='' "
-        "WHERE chat_id=?",
-        (chat_id,),
-    )
+    if row:
+        conn.execute("UPDATE orders SET status='cancelled' WHERE id=?", (row["id"],))
     conn.commit()
     conn.close()
-    return had_active, order_id
 
+def next_checkout_state(chat_id):
+    c = get_chat(chat_id)
+    if not cart_items(chat_id):
+        return "await_product_count"
+    if next_unsized_item(chat_id):
+        return "await_size"
+    if not c["full_name"]:
+        return "await_name"
+    if not c["phone"]:
+        return "await_phone"
+    if not c["address"]:
+        return "await_address"
+    return "confirm_order"
+
+def size_prompt(chat_id):
+    item = next_unsized_item(chat_id)
+    if not item:
+        return ""
+    return (
+        f"سایز «{item['product_name']}» رو بگو: S، M، L، XL، 2XL، 3XL یا 4XL. "
+        "اگر نمی‌دونی بنویس «نمیدونم»."
+    )
+
+def continue_checkout(chat_id):
+    state = next_checkout_state(chat_id)
+    update_chat(chat_id, state=state, pending_size="")
+    return state
 
 def start_order(chat_id):
     clear_cart(chat_id)
@@ -1626,9 +1367,8 @@ def start_order(chat_id):
         expected_items=0,
         collected_items=0,
         misunderstood_count=0,
-        previous_state="",
-        edit_target=0,
         pending_size="",
+        cancel_return_state="",
     )
 
 def payment_text():
@@ -1642,20 +1382,36 @@ def payment_text():
         "بعد از واریز، عکس رسید رو همینجا بفرست 📸"
     )
 
+def order_review_text(chat_id):
+    c = get_chat(chat_id)
+    return (
+        "لطفاً سفارش رو یک‌بار بررسی کن 👇\n\n"
+        f"{cart_summary(chat_id)}\n\n"
+        f"نام گیرنده: {c['full_name']}\n"
+        f"موبایل: {c['phone']}\n"
+        f"آدرس: {c['address']}\n\n"
+        "اگر همه‌چیز درسته بنویس «تأیید». برای اصلاح بنویس «ویرایش» و برای لغو بنویس «کنسل».\n"
+        "شماره کارت فقط بعد از تأیید نهایی ارسال می‌شه."
+    )
+
+def checkout_prompt(chat_id, state):
+    if state == "confirm_order":
+        return order_review_text(chat_id)
+    return resume_prompt(state, chat_id)
+
 def create_order(chat_id):
     c = get_chat(chat_id)
     items = cart_items(chat_id)
     total = cart_total(chat_id)
     product_summary = " | ".join(
-        f"{r['product_name']} x{r['quantity']} ({r['size'] or '-'})" for r in items
+        f"{r['product_name']} x{r['quantity']} ({r['size']})" for r in items
     )
-    size_summary = " | ".join(f"{r['product_name']}: {r['size'] or '-'}" for r in items)
     conn = db()
     cur = conn.execute(
         """INSERT INTO orders(chat_id,product,size,full_name,phone,address,price,created_at)
            VALUES(?,?,?,?,?,?,?,?)""",
         (
-            chat_id, product_summary, size_summary, c["full_name"], c["phone"],
+            chat_id, product_summary, " | ".join(r["size"] for r in items), c["full_name"], c["phone"],
             c["address"], total, datetime.now().isoformat(timespec="seconds")
         )
     )
@@ -1667,7 +1423,7 @@ def create_order(chat_id):
         )
     conn.commit()
     conn.close()
-    update_chat(chat_id, product=product_summary, size=size_summary, last_price=total)
+    update_chat(chat_id, product=product_summary, last_price=total)
     return order_id
 
 def latest_waiting_order(chat_id):
@@ -1797,38 +1553,15 @@ def valid_name(text):
 
 def valid_address(text):
     n = normalize_text(text)
-    if len(n) < 8:
+    if len(n) < 15 or len(n.split()) < 3:
         return False
     if detect_intent(n) in {"confused", "dont_know", "wait"}:
         return False
-    return True
-
-
-def is_clear_state_value(state, text):
-    """Protect unambiguous checkout values from intent interruption handling."""
-    if not state:
-        return False
-    if state == "await_product_count":
-        qty, product = parse_quantity_product(text)
-        return (qty is not None and bool(product)) or (parse_count(text) is not None and not looks_like_question(text))
-    if state == "await_item_name":
-        return looks_like_product_reference(text)
-    if state == "confirm_cart":
-        return is_add_choice(text) or is_done_choice(text)
-    if state == "await_add_count":
-        return parse_count(text) is not None and not looks_like_question(text)
-    if state in {"await_size", "await_height_weight"}:
-        h, w = extract_height_weight(text)
-        return bool(extract_explicit_size(text) or (h and w)) and not looks_like_question(text)
-    if state == "await_name":
-        return valid_name(text) and not looks_like_question(text)
-    if state == "await_phone":
-        return bool(extract_phone(text))
-    if state == "await_address":
-        n = normalize_text(text)
-        address_markers = ["خیابان", "خیابون", "کوچه", "پلاک", "بلوار", "میدان", "محله", "شهر"]
-        return valid_address(text) and any(marker in n for marker in address_markers)
-    return False
+    address_markers = [
+        "خیابان", "خیابون", "کوچه", "بلوار", "میدان", "محله", "پلاک",
+        "روستا", "شهرک", "جاده", "بن بست", "بنبست", "ساختمان", "مجتمع",
+    ]
+    return any(marker in n for marker in address_markers)
 
 # ------------------------------------------------------------
 # Admin
@@ -2002,12 +1735,12 @@ def handle_business_message(msg, business_owner_id=0):
                 f"رسید سفارش #{order['id']} رسید ✅ برای بررسی فروشگاه فرستادم. ممنونت 🌹"
             )
             items = "\n".join(
-                f"{r['product_name']} × {r['quantity']} — سایز {r['size'] or '-'} — {fmt_price(int(r['price'])*int(r['quantity']))}"
+                f"{r['product_name']} × {r['quantity']} | سایز {r['size']} — {fmt_price(int(r['price'])*int(r['quantity']))}"
                 for r in rows
             )
             caption = (
                 f"📸 رسید سفارش #{order['id']}\n\n{items}\n\n"
-                f"نام: {order['full_name']}\n"
+                f"سایز: {order['size']}\nنام: {order['full_name']}\n"
                 f"موبایل: {order['phone']}\nآدرس: {order['address']}\n"
                 f"جمع کل: {fmt_price(order['price'])}\nChat ID: {chat_id}"
             )
@@ -2041,89 +1774,108 @@ def handle_business_message(msg, business_owner_id=0):
     intent = detect_intent(text)
     smart_categories = detect_categories(text, limit=8)
     core_intents = detect_core_intents(text)
-    clear_state_value = is_clear_state_value(state, text)
+    ntext = normalize_text(text)
 
-    # Cancellation is intentionally two-step so a policy question or accidental
-    # phrase can never erase a live order.
+    # Cancellation is available at every checkout step, but always needs an
+    # explicit confirmation so a casual «نمی‌خوام» cannot erase an order.
     if state == "confirm_cancel":
-        c = get_chat(chat_id)
-        previous = c["previous_state"] or "confirm_cart"
-        if is_yes_choice(text) or normalize_text(text) in {"بله کنسل کن", "آره کنسل کن", "بله لغو کن"}:
-            had_active, order_id = cancel_current_order(chat_id)
-            send_business(
-                connection_id, chat_id,
-                "سفارشت کامل کنسل شد ✅ چیزی از سبد یا اطلاعات ثبت سفارشت باقی نموند. "
-                "هر وقت دوباره خواستی سفارش بدی، اسم یا عکس محصول رو بفرست 🌹"
-            )
-            if had_active and order_id:
-                send_admin(f"❌ سفارش #{order_id} توسط مشتری کنسل شد.\nChat ID: {chat_id}")
-            return
-        if is_no_choice(text):
-            update_chat(chat_id, state=previous, previous_state="")
-            send_business(
-                connection_id, chat_id,
-                "باشه، سفارشت کنسل نشد ✅\n\n" + resume_prompt(previous, chat_id)
-            )
-            return
-        send_business(connection_id, chat_id, "مطمئنی کل سفارش کنسل بشه؟ فقط بگو «بله» یا «نه».")
+        previous = c["cancel_return_state"] or ""
+        if is_affirmative_choice(text):
+            if previous == "await_receipt":
+                cancel_latest_waiting_order(chat_id)
+            reset_order_state(chat_id)
+            send_business(connection_id, chat_id, "سفارشت لغو شد ✅ هیچ پرداختی لازم نیست. هر وقت خواستی دوباره از اول ثبت می‌کنیم 🌹")
+        elif is_negative_choice(text):
+            update_chat(chat_id, state=previous, cancel_return_state="")
+            send_business(connection_id, chat_id, "باشه، سفارش لغو نشد 👌\n\n" + checkout_prompt(chat_id, previous))
+        else:
+            send_business(connection_id, chat_id, "کل سفارش لغو بشه؟ لطفاً بنویس «بله لغو کن» یا «نه ادامه بده».")
         return
 
-    # Explicit cancellation is a universal interrupt and must run before every
-    # question/field handler so it works from any checkout stage.
-    if is_cancel_order_request(text):
-        if state or cart_items(chat_id) or latest_waiting_order(chat_id):
-            update_chat(chat_id, previous_state=state, state="confirm_cancel")
-            send_business(
-                connection_id, chat_id,
-                "مطمئنی می‌خوای کل سفارش کنسل بشه؟ با کنسل‌کردن، سبد و اطلاعات این سفارش پاک می‌شن.\n\n"
-                "برای تأیید بنویس «بله»؛ برای برگشت بنویس «نه»."
-            )
-        else:
-            send_business(
-                connection_id, chat_id,
-                "الان سفارش فعالی برای کنسل‌کردن نداری عزیز 🌹 هر وقت خواستی سفارش جدید بدی، اسم یا عکس محصول رو بفرست."
-            )
+    if state and is_cancel_request(text):
+        update_chat(chat_id, state="confirm_cancel", cancel_return_state=state)
+        send_business(connection_id, chat_id, "مطمئنی می‌خوای کل سفارش لغو بشه؟\nبگو «بله لغو کن» یا «نه ادامه بده».")
         return
 
-    edit_kind = edit_request_kind(text)
-    edit_states = {
-        "edit_menu", "edit_remove", "edit_quantity_target", "edit_quantity_value",
-        "edit_size_target", "edit_size_value", "edit_name", "edit_phone", "edit_address",
-    }
-    if state in edit_states:
-        handled, reply = process_edit_state(chat_id, state, text)
-        if handled:
-            send_business(connection_id, chat_id, reply)
-            return
-    if edit_kind:
-        if state and state != "await_receipt":
-            send_business(connection_id, chat_id, begin_edit(chat_id, state, edit_kind))
-        elif state == "await_receipt":
-            send_business(
-                connection_id, chat_id,
-                "این سفارش تأیید نهایی شده و شماره کارت ارسال شده. برای تغییر کامل، سفارش رو کنسل کن و دوباره ثبتش کن 🌹"
-            )
+    # Small, state-local edit menu. Product editing restarts only the cart;
+    # other fields are changed in place and return to the right checkout step.
+    if state == "edit_menu":
+        if any(x in ntext for x in ["محصول", "سبد", "کالا"]):
+            start_order(chat_id)
+            send_business(connection_id, chat_id, "باشه، محصولات قبلی پاک شد تا سبد رو دقیق از نو بچینیم. چند محصول می‌خوای؟ از ۱ تا ۵۰.")
+        elif "سایز" in ntext or extract_explicit_size(text):
+            clear_cart_sizes(chat_id)
+            update_chat(chat_id, state="await_size", pending_size="")
+            send_business(connection_id, chat_id, "حتماً، سایزها رو دوباره ثبت می‌کنیم 👌\n" + size_prompt(chat_id))
+        elif any(x in ntext for x in ["نام", "اسم"]):
+            update_chat(chat_id, state="edit_name")
+            send_business(connection_id, chat_id, "اسم و فامیلی درست تحویل‌گیرنده رو بفرست.")
+        elif any(x in ntext for x in ["موبایل", "شماره", "تلفن"]):
+            update_chat(chat_id, state="edit_phone")
+            send_business(connection_id, chat_id, "شماره موبایل درست گیرنده رو بفرست؛ ۱۱ رقم و با 09.")
+        elif "آدرس" in ntext or "ادرس" in ntext:
+            update_chat(chat_id, state="edit_address")
+            send_business(connection_id, chat_id, "آدرس کامل درست رو بفرست؛ شهر، خیابون، کوچه و پلاک.")
+        elif any(x in ntext for x in ["ادامه", "برگرد", "هیچی"]):
+            new_state = next_checkout_state(chat_id)
+            update_chat(chat_id, state=new_state)
+            send_business(connection_id, chat_id, checkout_prompt(chat_id, new_state))
         else:
-            send_business(connection_id, chat_id, "الان سفارش فعالی برای ویرایش نداری عزیز 🌹")
+            send_business(connection_id, chat_id, "کدوم بخش ویرایش بشه؟ «محصولات»، «سایز»، «نام»، «موبایل» یا «آدرس».")
+        return
+
+    if state == "edit_name":
+        if not valid_name(text):
+            send_business(connection_id, chat_id, "اسم و فامیلی کامل رو بفرست؛ مثلاً «علی رضایی».")
+            return
+        update_chat(chat_id, full_name=text.strip())
+        new_state = next_checkout_state(chat_id)
+        update_chat(chat_id, state=new_state)
+        send_business(connection_id, chat_id, "نام اصلاح شد ✅\n\n" + checkout_prompt(chat_id, new_state))
+        return
+
+    if state == "edit_phone":
+        phone = extract_phone(text)
+        if not phone:
+            send_business(connection_id, chat_id, "شماره باید ۱۱ رقم و با 09 شروع بشه.")
+            return
+        update_chat(chat_id, phone=phone)
+        new_state = next_checkout_state(chat_id)
+        update_chat(chat_id, state=new_state)
+        send_business(connection_id, chat_id, "شماره موبایل اصلاح شد ✅\n\n" + checkout_prompt(chat_id, new_state))
+        return
+
+    if state == "edit_address":
+        if not valid_address(text):
+            send_business(connection_id, chat_id, "آدرس هنوز کامل نیست؛ شهر، خیابون/کوچه و پلاک یا نشانی دقیق رو یکجا بفرست.")
+            return
+        update_chat(chat_id, address=text.strip())
+        new_state = next_checkout_state(chat_id)
+        update_chat(chat_id, state=new_state)
+        send_business(connection_id, chat_id, "آدرس اصلاح شد ✅\n\n" + checkout_prompt(chat_id, new_state))
+        return
+
+    if state and ("edit_order" in smart_categories or ntext in {"ویرایش", "اصلاح", "تغییر سفارش"}):
+        update_chat(chat_id, state="edit_menu")
+        send_business(connection_id, chat_id, "حتماً 👌 کدوم بخش سفارش رو ویرایش کنیم؟\nمحصولات، سایز، نام، موبایل یا آدرس؟")
         return
 
     # High-confidence store-policy questions take precedence over fuzzy intents.
     policy = store_policy_answer(text)
-    if policy and not clear_state_value:
+    if policy:
         resume = resume_prompt(state, chat_id) if state else ""
         send_business(connection_id, chat_id, policy + (f"\n\n{resume}" if resume else ""))
         return
 
     # Natural interruption: customer does not know the model name. Do not keep
     # demanding a number or accidentally interpret «اسم» as size S.
-    ntext = normalize_text(text)
     if "نمیدونم" in ntext and any(x in ntext for x in ["اسم مدل", "مدلشو", "مدلش", "اسمشو"]):
         send_business(connection_id, chat_id, "اشکالی نداره 🌹 عکس یا لینک همون کار رو بفرست؛ لازم نیست اسم مدلش رو بدونی.")
         return
 
     # Several questions in one message: answer up to three without losing checkout state.
     multi = multi_question_answer(text, chat_id)
-    if multi and not clear_state_value:
+    if multi and state not in {"await_product_count", "await_item_name", "await_add_count", "await_size", "await_height_weight"}:
         resume = resume_prompt(state, chat_id) if state else ""
         send_business(connection_id, chat_id, multi + (f"\n\n{resume}" if resume else ""))
         return
@@ -2154,14 +1906,6 @@ def handle_business_message(msg, business_owner_id=0):
             send_business(connection_id, chat_id, random.choice(DONT_KNOW_GENERIC))
         return
 
-    # Small-talk must never be stored as an order field. Keep the current state
-    # untouched and remind the customer where checkout was paused.
-    if state and intent in {"greeting", "thanks", "bye"}:
-        answer = answer_intent(intent, text, chat_id)
-        resume = resume_prompt(state, chat_id)
-        send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
-        return
-
     # Let customer ask normal shop questions in the middle of checkout.
     # Answer first, then gently return to the exact unfinished step.
     global_intents = {
@@ -2170,18 +1914,23 @@ def handle_business_message(msg, business_owner_id=0):
         "quality", "original", "return"
     }
     if intent in global_intents:
+        product_entry_states = {"await_product_count", "await_item_name", "await_add_count"}
         # A bare product name such as "تیشرت سفید" or "هودی مشکی" must be
-        # saved as a product, and valid form values must stay form values.
-        if not state or (looks_like_question(text) and not clear_state_value):
-            answer = answer_intent(intent, text, chat_id)
+        # saved as a product, not mistaken for a color/quality question.
+        if state not in product_entry_states or looks_like_question(text):
+            if intent == "payment" and state and state != "await_receipt":
+                answer = "پرداخت کارت‌به‌کارته؛ بعد از اینکه خلاصه سفارش رو تأیید کنی، شماره کارت و نام صاحب کارت برات ارسال می‌شه 🌹"
+            else:
+                answer = answer_intent(intent, text, chat_id)
             resume = resume_prompt(state, chat_id) if state else ""
             send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
             return
 
     # Size question can also interrupt most form states, except when the size answer
     # itself is currently expected.
-    if intent == "size" and state not in {"await_size", "await_height_weight"}:
-        if not state or (looks_like_question(text) and not clear_state_value):
+    if intent == "size" and state not in {"await_size", "await_height_weight", "confirm_size"}:
+        product_entry_states = {"await_product_count", "await_item_name", "await_add_count"}
+        if state not in product_entry_states or looks_like_question(text):
             answer, _ = size_answer(text)
             resume = resume_prompt(state, chat_id) if state else ""
             send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
@@ -2189,17 +1938,43 @@ def handle_business_message(msg, business_owner_id=0):
 
     # Long-tail customer question during personal/payment form steps.
     # We answer it, keep the state untouched, then remind the exact unfinished field.
-    if smart_categories and state:
+    if smart_categories and state in {"confirm_cart", "await_name", "await_phone", "await_address", "confirm_order", "await_receipt"}:
         cat = next((c for c in smart_categories if c in QUESTIONISH), None)
-        # Only a real question may interrupt checkout. Unambiguous values such
-        # as «هودی مشکی», «3», «XL» and a full address keep their normal path.
-        if cat and looks_like_question(text) and not clear_state_value:
-            answer = answer_category(cat, text, chat_id)
+        if cat:
+            if cat in {"payment", "card"} and state != "await_receipt":
+                answer = "پرداخت کارت‌به‌کارته؛ شماره کارت فقط بعد از تأیید نهایی سفارش فرستاده می‌شه 🌹"
+            else:
+                answer = answer_category(cat, text, chat_id)
             resume = resume_prompt(state, chat_id)
             send_business(connection_id, chat_id, answer + (f"\n\n{resume}" if resume else ""))
             return
 
     # ----------------------- Order states -----------------------
+    if state == "confirm_order":
+        if not is_affirmative_choice(text):
+            if is_negative_choice(text):
+                update_chat(chat_id, state="edit_menu")
+                send_business(connection_id, chat_id, "باشه؛ کدوم بخش رو اصلاح کنیم؟ محصولات، سایز، نام، موبایل یا آدرس؟")
+            else:
+                send_business(connection_id, chat_id, "برای ثبت نهایی بنویس «تأیید». برای تغییر بنویس «ویرایش» و برای لغو «کنسل».")
+            return
+
+        order_id = create_order(chat_id)
+        update_chat(chat_id, state="await_receipt", last_price=cart_total(chat_id))
+        c = get_chat(chat_id)
+        send_business(connection_id, chat_id, f"سفارش #{order_id} نهایی شد ✅\n\n" + payment_text())
+        admin_items = "\n".join(
+            f"{r['product_name']} × {r['quantity']} | سایز {r['size']} — {fmt_price(int(r['price'])*int(r['quantity']))}"
+            for r in cart_items(chat_id)
+        )
+        send_admin(
+            f"🆕 سفارش #{order_id}\n\n{admin_items}\n\n"
+            f"جمع کل: {fmt_price(c['last_price'])}\n"
+            f"نام: {c['full_name']}\nموبایل: {c['phone']}\nآدرس: {c['address']}\n"
+            f"Chat ID: {chat_id}\n\n/pause {chat_id}"
+        )
+        return
+
     if state == "await_product_count":
         qty, product = parse_quantity_product(text)
         if qty is not None and product:
@@ -2278,18 +2053,19 @@ def handle_business_message(msg, business_owner_id=0):
         if is_add_choice(text):
             current = cart_unit_count(chat_id)
             if current >= MAX_ITEMS_PER_ORDER:
-                update_chat(chat_id, state="await_size", pending_size="")
-                send_business(connection_id, chat_id, size_request_prompt(chat_id, "به سقف ۵۰ عدد رسیدیم 👌"))
+                update_chat(chat_id, state="await_size")
+                send_business(connection_id, chat_id, "به سقف ۵۰ عدد رسیدیم 👌 حالا سایز هر محصول رو جدا ثبت می‌کنیم.\n" + size_prompt(chat_id))
             else:
                 update_chat(chat_id, state="await_add_count")
                 send_business(connection_id, chat_id, f"حتماً. چند محصول دیگه اضافه کنیم؟ حداکثر {MAX_ITEMS_PER_ORDER-current} عدد.")
             return
 
         if is_done_choice(text) or fuzzy_any(text, ["آره همینا", "همینا خوبه", "نهایی کن"], 0.65):
-            update_chat(chat_id, state="await_size", last_price=cart_total(chat_id), pending_size="")
+            update_chat(chat_id, state="await_size", last_price=cart_total(chat_id))
             send_business(
                 connection_id, chat_id,
-                size_request_prompt(chat_id, f"عالی، اینا نهایی شدن ✅\n\n{cart_summary(chat_id)}")
+                f"عالی، اینا نهایی شدن ✅\n\n{cart_summary(chat_id)}\n\n"
+                "حالا سایز هر محصول رو جدا ثبت می‌کنیم.\n" + size_prompt(chat_id)
             )
             return
 
@@ -2313,38 +2089,20 @@ def handle_business_message(msg, business_owner_id=0):
         return
 
     if state == "await_size":
-        c = get_chat(chat_id)
-        pending = c["pending_size"] or ""
-        if pending:
-            explicit = extract_explicit_size(text)
-            if is_yes_choice(text) or normalize_text(text) in {"ثبت کن", "همونو ثبت کن", "همین خوبه"}:
-                next_item = save_current_product_size(chat_id, pending)
-                if next_item:
-                    send_business(connection_id, chat_id, size_request_prompt(chat_id, f"سایز {pending} ثبت شد ✅"))
-                else:
-                    send_business(connection_id, chat_id, f"سایز {pending} ثبت شد ✅ حالا اسم و فامیلی تحویل‌گیرنده رو بفرست.")
-                return
-            if explicit:
-                next_item = save_current_product_size(chat_id, explicit)
-                if next_item:
-                    send_business(connection_id, chat_id, size_request_prompt(chat_id, f"سایز {explicit} ثبت شد ✅"))
-                else:
-                    send_business(connection_id, chat_id, f"سایز {explicit} ثبت شد ✅ حالا اسم و فامیلی تحویل‌گیرنده رو بفرست.")
-                return
-            if is_no_choice(text):
-                update_chat(chat_id, pending_size="")
-                send_business(connection_id, chat_id, size_request_prompt(chat_id, "باشه، پیشنهاد قبلی ثبت نشد."))
-                return
-
         # If height/weight was supplied, make recommendation and remember it.
         h, w = extract_height_weight(text)
         if h and w:
             ans, rec = size_answer(text)
             if rec:
-                update_chat(chat_id, pending_size=rec)
+                update_chat(chat_id, state="confirm_size", pending_size=rec)
+                item = next_unsized_item(chat_id)
+                if not item:
+                    update_chat(chat_id, state="await_product_count", pending_size="")
+                    send_business(connection_id, chat_id, "سبد سفارشت خالیه؛ اول تعداد محصول رو بگو.")
+                    return
                 send_business(
                     connection_id, chat_id,
-                    ans + f"\n\nپیشنهادم {rec} هست؛ {rec} ثبت کنم یا فیت آزادتر/جذب‌تر می‌خوای؟"
+                    ans + f"\n\nبرای «{item['product_name']}» سایز {rec} ثبت کنم؟ بگو «همون خوبه» یا سایز دیگه رو بنویس."
                 )
             else:
                 send_business(connection_id, chat_id, ans)
@@ -2353,11 +2111,20 @@ def handle_business_message(msg, business_owner_id=0):
         # Accept every supported explicit size, including Persian aliases.
         chosen = extract_explicit_size(text)
         if chosen:
-            next_item = save_current_product_size(chat_id, chosen)
-            if next_item:
-                send_business(connection_id, chat_id, size_request_prompt(chat_id, f"گرفتم 👌 سایز {chosen} ثبت شد ✅"))
+            item = next_unsized_item(chat_id)
+            if not item:
+                update_chat(chat_id, state="await_product_count", pending_size="")
+                send_business(connection_id, chat_id, "سبد سفارشت خالیه؛ اول بگو چند محصول می‌خوای تا دوباره ثبت کنیم.")
+                return
+            set_cart_item_size(chat_id, item["position"], chosen)
+            update_chat(chat_id, size=chosen, pending_size="")
+            if next_unsized_item(chat_id):
+                update_chat(chat_id, state="await_size")
+                follow = size_prompt(chat_id)
             else:
-                send_business(connection_id, chat_id, f"گرفتم 👌 سایز {chosen} ثبت شد ✅ حالا اسم و فامیلی تحویل‌گیرنده رو بفرست.")
+                new_state = continue_checkout(chat_id)
+                follow = checkout_prompt(chat_id, new_state)
+            send_business(connection_id, chat_id, f"گرفتم 👌 سایز {chosen} برای «{item['product_name']}» ثبت شد ✅\n\n{follow}")
             return
 
         send_business(
@@ -2370,13 +2137,41 @@ def handle_business_message(msg, business_owner_id=0):
     if state == "await_height_weight":
         ans, rec = size_answer(text)
         if rec:
-            update_chat(chat_id, state="await_size", pending_size=rec)
+            update_chat(chat_id, state="confirm_size", pending_size=rec)
+            item = next_unsized_item(chat_id)
+            if not item:
+                update_chat(chat_id, state="await_product_count", pending_size="")
+                send_business(connection_id, chat_id, "سبد سفارشت خالیه؛ اول تعداد محصول رو بگو.")
+                return
             send_business(
                 connection_id, chat_id,
-                ans + f"\n\nپیشنهادم {rec} هست؛ {rec} ثبت کنم یا فیت آزادتر/جذب‌تر می‌خوای؟"
+                ans + f"\n\nبرای «{item['product_name']}» سایز {rec} ثبت کنم؟ بگو «همون خوبه» یا سایز دیگه رو بنویس."
             )
         else:
             send_business(connection_id, chat_id, ans)
+        return
+
+    if state == "confirm_size":
+        chosen = extract_explicit_size(text)
+        if not chosen and is_affirmative_choice(text):
+            chosen = c["pending_size"]
+        if not chosen:
+            send_business(connection_id, chat_id, "بگو «همون خوبه» تا سایز پیشنهادی ثبت بشه، یا سایز دلخواهت مثل L یا 2XL رو بنویس.")
+            return
+        item = next_unsized_item(chat_id)
+        if not item:
+            update_chat(chat_id, state="await_product_count", pending_size="")
+            send_business(connection_id, chat_id, "سبد سفارشت خالیه؛ اول تعداد محصول رو بگو.")
+            return
+        set_cart_item_size(chat_id, item["position"], chosen)
+        update_chat(chat_id, size=chosen, pending_size="")
+        if next_unsized_item(chat_id):
+            update_chat(chat_id, state="await_size")
+            follow = size_prompt(chat_id)
+        else:
+            new_state = continue_checkout(chat_id)
+            follow = checkout_prompt(chat_id, new_state)
+        send_business(connection_id, chat_id, f"سایز {chosen} برای «{item['product_name']}» ثبت شد ✅\n\n{follow}")
         return
 
     if state == "await_name":
@@ -2412,49 +2207,11 @@ def handle_business_message(msg, business_owner_id=0):
         if not valid_address(text):
             send_business(
                 connection_id, chat_id,
-                "این برای آدرس خیلی کوتاهه 😄 لطفاً حداقل شهر + خیابون + پلاک رو بنویس. مثلاً «تهران، ولیعصر، کوچه ... پلاک ...»."
+                "آدرس هنوز کامل نیست 😄 لطفاً شهر + خیابون/کوچه + پلاک یا نشانی دقیق رو یکجا بنویس. مثلاً «تهران، ولیعصر، کوچه ... پلاک ...»."
             )
             return
         update_chat(chat_id, address=text.strip(), state="confirm_order")
         send_business(connection_id, chat_id, order_review_text(chat_id))
-        return
-
-    if state == "confirm_order":
-        n = normalize_text(text)
-        if not (is_yes_choice(text) or n in {"تایید نهایی", "تأیید نهایی", "نهایی کن", "درسته تایید"}):
-            send_business(
-                connection_id, chat_id,
-                "برای ثبت قطعی بنویس «تأیید نهایی». اگر چیزی اشتباهه بنویس «ویرایش سفارش»؛ "
-                "برای لغو هم بنویس «کنسل سفارش»."
-            )
-            return
-
-        order_id = create_order(chat_id)
-        update_chat(chat_id, state="await_receipt", previous_state="", edit_target=0, pending_size="")
-        c = get_chat(chat_id)
-
-        summary = (
-            f"تمام شد ✅ سفارش #{order_id} ثبت شد.\n\n"
-            f"{cart_summary(chat_id)}\n\n"
-            f"نام گیرنده: {c['full_name']}\n"
-            f"موبایل: {c['phone']}\n"
-            f"آدرس: {c['address']}\n\n"
-            "ارسال فقط با پست پیشتازه؛ آماده‌سازی معمولاً ۳ تا ۵ روز کاری و زمان معمول رسیدن مرسوله حدود ۸ تا ۱۲ روزه.\n\n"
-            + payment_text()
-        )
-        send_business(connection_id, chat_id, summary)
-
-        admin_items = "\n".join(
-            f"{r['product_name']} × {r['quantity']} — سایز {r['size']} — {fmt_price(int(r['price'])*int(r['quantity']))}"
-            for r in cart_items(chat_id)
-        )
-        send_admin(
-            f"🆕 سفارش #{order_id}\n\n{admin_items}\n\n"
-            f"جمع کل: {fmt_price(c['last_price'])}\n"
-            f"نام: {c['full_name']}\n"
-            f"موبایل: {c['phone']}\nآدرس: {c['address']}\n"
-            f"Chat ID: {chat_id}\n\n/pause {chat_id}"
-        )
         return
 
     if state == "await_receipt":

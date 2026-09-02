@@ -43,10 +43,13 @@ chat=990001
 bot.ensure_chat(chat,'biz')
 accepted=0
 for size in bot.SIZE_ORDER:
+    bot.clear_cart(chat)
+    bot.add_cart_item(chat, 'هودی تست')
     bot.update_chat(chat,state='await_size',size='')
     bot.handle_business_message({'business_connection_id':'biz','chat':{'id':chat},'from':{'id':999},'text':size},business_owner_id=111)
     row=bot.get_chat(chat)
-    passed=(row['size']==size and row['state']=='await_name')
+    item=bot.cart_items(chat)[0]
+    passed=(row['size']==size and item['size']==size and row['state']=='await_name')
     accepted+=passed
     print(('OK' if passed else 'FAIL'), '| checkout', size, '=>', row['size'], row['state'])
 
