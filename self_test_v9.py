@@ -66,14 +66,18 @@ sequence=[
 ("بلد نیستم","await_height_weight"),
 ("چی میگی","await_height_weight"),
 ("وایسا","await_height_weight"),
-("قد 180 وزن 80 آزاد","await_name"),
+("قد 180 وزن 80 آزاد","await_size"),
+("بله","await_size"),
+("L","await_size"),
+("M","await_name"),
 ("چی میگی","await_name"),
 ("علی رضایی","await_phone"),
 ("وایسا","await_phone"),
 ("اه","await_phone"),
 ("09123456789","await_address"),
 ("هزینه پوصت چقده","await_address"),
-("تهران، ولیعصر، کوچه 10، پلاک 20","await_receipt"),
+("تهران، ولیعصر، کوچه 10، پلاک 20","confirm_order"),
+("تأیید نهایی","await_receipt"),
 ]
 print("\nSTATE MACHINE TESTS")
 state_ok=0
