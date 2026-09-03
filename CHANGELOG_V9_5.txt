@@ -1,0 +1,24 @@
+V9.5 Anti-Spam Guard
+====================
+
+Added a persistent customer anti-spam layer without changing the sales engine.
+
+Default behavior:
+- 15 incoming customer messages within 60 seconds => warning 1.
+- The burst counter resets after a warning.
+- A second burst => warning 2.
+- A third burst => warning 3 and internal bot block.
+- Blocked customers receive no further automatic replies until admin unblocks them.
+
+Admin commands:
+- /spaminfo CHAT_ID
+- /unblock CHAT_ID
+
+Optional environment variables:
+- SPAM_ENABLED=1
+- SPAM_MESSAGE_LIMIT=15
+- SPAM_WINDOW_SECONDS=60
+- SPAM_MAX_WARNINGS=3
+
+Important:
+This is an internal bot block. Telegram Bot API does not make this equivalent to pressing Block on the customer's Telegram account.

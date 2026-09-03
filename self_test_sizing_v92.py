@@ -5,6 +5,8 @@ os.environ['DB_PATH']=os.path.join(tempfile.gettempdir(),'shop_v92_sizing_test.d
 try: os.remove(os.environ['DB_PATH'])
 except FileNotFoundError: pass
 sys.path.insert(0, os.path.dirname(__file__))
+import os
+os.environ["SPAM_ENABLED"] = "0"
 import main as bot
 bot.init_db()
 

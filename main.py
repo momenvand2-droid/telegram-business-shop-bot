@@ -25,6 +25,14 @@ PRICE_MAX = 2_000_000
 SHIPPING_FEE = 112_000
 MAX_ITEMS_PER_ORDER = 50
 
+# Anti-spam: 15 customer messages inside 60 seconds = 1 warning.
+# After 3 warnings the customer is blocked inside the bot (no more auto replies)
+# until the admin explicitly unblocks them.
+SPAM_ENABLED = os.environ.get("SPAM_ENABLED", "1").strip().lower() not in {"0", "false", "off", "no"}
+SPAM_MESSAGE_LIMIT = int(os.environ.get("SPAM_MESSAGE_LIMIT", "15"))
+SPAM_WINDOW_SECONDS = int(os.environ.get("SPAM_WINDOW_SECONDS", "60"))
+SPAM_MAX_WARNINGS = int(os.environ.get("SPAM_MAX_WARNINGS", "3"))
+
 # ------------------------------------------------------------
 # Response banks
 # Responses are assembled from several independent banks.
@@ -870,7 +878,11 @@ def init_db():
             pending_size TEXT DEFAULT '',
             cancel_return_state TEXT DEFAULT '',
             edit_return_state TEXT DEFAULT '',
-            pending_product_photo TEXT DEFAULT ''
+            pending_product_photo TEXT DEFAULT '',
+            spam_window_started INTEGER DEFAULT 0,
+            spam_message_count INTEGER DEFAULT 0,
+            spam_warnings INTEGER DEFAULT 0,
+            spam_blocked INTEGER DEFAULT 0
         )
     """)
     cols = {row[1] for row in conn.execute("PRAGMA table_info(chats)").fetchall()}
@@ -882,6 +894,10 @@ def init_db():
         "cancel_return_state": "TEXT DEFAULT ''",
         "edit_return_state": "TEXT DEFAULT ''",
         "pending_product_photo": "TEXT DEFAULT ''",
+        "spam_window_started": "INTEGER DEFAULT 0",
+        "spam_message_count": "INTEGER DEFAULT 0",
+        "spam_warnings": "INTEGER DEFAULT 0",
+        "spam_blocked": "INTEGER DEFAULT 0",
     }
     for col, spec in migrations.items():
         if col not in cols:
@@ -1019,6 +1035,79 @@ def update_chat(chat_id, **kwargs):
     conn.execute(f"UPDATE chats SET {fields} WHERE chat_id=?", vals)
     conn.commit()
     conn.close()
+
+def anti_spam_check(connection_id, chat_id):
+    """Return True when this incoming customer message must be consumed by anti-spam.
+
+    A burst of SPAM_MESSAGE_LIMIT messages within SPAM_WINDOW_SECONDS earns one
+    warning. The burst counter is then reset so normal customers are not warned
+    repeatedly for the same burst. On the third warning the chat is internally
+    blocked and receives no more automated replies until /unblock is used.
+    """
+    if not SPAM_ENABLED:
+        return False
+    c = get_chat(chat_id)
+    if not c:
+        return False
+    if int(c["spam_blocked"] or 0):
+        return True
+
+    now = int(time.time())
+    started = int(c["spam_window_started"] or 0)
+    count = int(c["spam_message_count"] or 0)
+
+    if not started or now - started >= SPAM_WINDOW_SECONDS:
+        started = now
+        count = 1
+    else:
+        count += 1
+
+    if count < SPAM_MESSAGE_LIMIT:
+        update_chat(chat_id, spam_window_started=started, spam_message_count=count)
+        return False
+
+    warnings = int(c["spam_warnings"] or 0) + 1
+    if warnings >= SPAM_MAX_WARNINGS:
+        update_chat(
+            chat_id,
+            spam_window_started=now,
+            spam_message_count=0,
+            spam_warnings=warnings,
+            spam_blocked=1,
+        )
+        send_business(
+            connection_id,
+            chat_id,
+            "⛔️ تعداد پیام‌هات خیلی بالاست. این سومین هشدار اسپم بود و پاسخ خودکار این گفتگو مسدود شد.",
+        )
+        if ADMIN_ID:
+            send_admin(
+                f"⛔️ مشتری {chat_id} بعد از {warnings} هشدار اسپم مسدود شد.\n"
+                f"برای آزاد کردن: /unblock {chat_id}"
+            )
+        return True
+
+    update_chat(
+        chat_id,
+        spam_window_started=now,
+        spam_message_count=0,
+        spam_warnings=warnings,
+    )
+    send_business(
+        connection_id,
+        chat_id,
+        f"⚠️ تعداد پیام‌هات خیلی بالاست. لطفاً پیام‌ها رو پشت‌سرهم نفرست. هشدار اسپم {warnings} از {SPAM_MAX_WARNINGS}.",
+    )
+    return True
+
+def reset_spam_status(chat_id):
+    update_chat(
+        chat_id,
+        spam_window_started=0,
+        spam_message_count=0,
+        spam_warnings=0,
+        spam_blocked=0,
+    )
 
 # ------------------------------------------------------------
 # Telegram API
@@ -1489,6 +1578,30 @@ def payment_text():
         "بعد از واریز، عکس رسید رو همینجا بفرست 📸"
     )
 
+def has_received_receipt(chat_id):
+    """True once this customer has sent a receipt for any order. Persisted in SQLite."""
+    conn = db()
+    row = conn.execute(
+        "SELECT 1 FROM orders WHERE chat_id=? AND status IN ('receipt_sent','paid','confirmed','completed') LIMIT 1",
+        (int(chat_id),),
+    ).fetchone()
+    conn.close()
+    return bool(row)
+
+def payment_text_for_chat(chat_id):
+    """Before receipt: always return the current card. After receipt: never send card details again."""
+    if has_received_receipt(chat_id):
+        return (
+            "رسید پرداختتون دریافت شده عزیزم 🌹\n"
+            "نیازی به شماره کارت جدید نیست. سفارشتون در حال بررسیه ❤️"
+        )
+
+    current_card = (get_setting("card_number") or "").strip()
+    current_holder = (get_setting("card_holder") or "").strip()
+    if not current_card or not current_holder:
+        return "اطلاعات کارت هنوز کامل تنظیم نشده؛ لطفاً یک لحظه صبر کن تا فروشگاه بررسی کنه 🌹"
+    return payment_text()
+
 def order_review_text(chat_id):
     c = get_chat(chat_id)
     return (
@@ -1638,7 +1751,7 @@ def answer_intent(intent, text, chat_id):
     if intent == "price_difference":
         return random.choice(PRICE_DIFF_REPLIES)
     if intent == "payment":
-        return payment_text()
+        return payment_text_for_chat(chat_id)
     if intent == "stock":
         return random.choice(STOCK_REPLIES)
     if intent == "color":
@@ -1814,6 +1927,36 @@ def handle_admin_message(msg):
             send_admin(f"▶️ پاسخ خودکار چت {raw} فعال شد.")
         return
 
+    if text.startswith("/unblock"):
+        raw = re.sub(r"\D", "", text.replace("/unblock", "", 1))
+        if not raw:
+            send_admin("فرمت درست:\n/unblock CHAT_ID")
+            return
+        cid = int(raw)
+        ensure_chat(cid, "")
+        reset_spam_status(cid)
+        update_chat(cid, paused=0)
+        send_admin(f"✅ مشتری {cid} از لیست ضداسپم آزاد شد و هشدارها صفر شدند.")
+        return
+
+    if text.startswith("/spaminfo"):
+        raw = re.sub(r"\D", "", text.replace("/spaminfo", "", 1))
+        if not raw:
+            send_admin("فرمت درست:\n/spaminfo CHAT_ID")
+            return
+        cid = int(raw)
+        c = get_chat(cid)
+        if not c:
+            send_admin("برای این Chat ID اطلاعاتی پیدا نشد.")
+            return
+        send_admin(
+            f"🛡 وضعیت ضداسپم {cid}:\n"
+            f"هشدارها: {int(c['spam_warnings'] or 0)}/{SPAM_MAX_WARNINGS}\n"
+            f"پیام‌های موج فعلی: {int(c['spam_message_count'] or 0)}/{SPAM_MESSAGE_LIMIT}\n"
+            f"مسدود: {'بله' if int(c['spam_blocked'] or 0) else 'خیر'}"
+        )
+        return
+
     if text.startswith("/resetprices"):
         raw = re.sub(r"\D", "", text.replace("/resetprices", "", 1))
         if raw:
@@ -1835,7 +1978,10 @@ def handle_admin_message(msg):
             "/setwholesale @username  ← ثبت آیدی مسئول عمده\n"
             "/wholesaleinfo  ← نمایش آیدی مسئول عمده\n"
             "/orders\n"
-            "/pause CHAT_ID\n/resume CHAT_ID\n/resetprices CHAT_ID"
+            "/pause CHAT_ID\n/resume CHAT_ID\n"
+            "/spaminfo CHAT_ID  ← وضعیت ضداسپم\n"
+            "/unblock CHAT_ID  ← آزاد کردن مشتری و صفر کردن هشدارها\n"
+            "/resetprices CHAT_ID"
         )
 
 # ------------------------------------------------------------
@@ -1854,9 +2000,24 @@ def handle_business_message(msg, business_owner_id=0):
 
     ensure_chat(chat_id, connection_id)
     c = get_chat(chat_id)
+    if c and int(c["spam_blocked"] or 0):
+        return
     if c and c["paused"]:
         return
 
+    # Voice messages are not processed as customer intent and do not count
+    # toward the anti-spam burst counter.
+    if msg.get("voice"):
+        send_business(connection_id, chat_id, "لطفاً پیامتون رو تایپ کنید 🌹")
+        return
+
+    # Count every incoming customer message (text, photo, caption, etc.) before
+    # normal sales logic. When a burst reaches the threshold this message is
+    # consumed by the anti-spam warning instead of producing another bot reply.
+    if anti_spam_check(connection_id, chat_id):
+        return
+
+    c = get_chat(chat_id)
     state = c["state"] if c else ""
     text = (msg.get("text") or msg.get("caption") or "").strip()
 
@@ -2175,7 +2336,7 @@ def handle_business_message(msg, business_owner_id=0):
         order_id = create_order(chat_id)
         update_chat(chat_id, state="await_receipt", last_price=cart_total(chat_id))
         c = get_chat(chat_id)
-        send_business(connection_id, chat_id, f"سفارش #{order_id} نهایی شد ✅\n\n" + payment_text())
+        send_business(connection_id, chat_id, f"سفارش #{order_id} نهایی شد ✅\n\n" + payment_text_for_chat(chat_id))
         admin_items = "\n".join(
             f"{r['product_name']} × {r['quantity']} | سایز {r['size']} — {fmt_price(int(r['price'])*int(r['quantity']))}"
             for r in cart_items(chat_id)

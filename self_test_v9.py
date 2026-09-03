@@ -7,6 +7,8 @@ try: os.remove(os.environ["DB_PATH"])
 except FileNotFoundError: pass
 
 sys.path.insert(0, r"/mnt/data/telegram_business_shop_v9_smart")
+import os
+os.environ["SPAM_ENABLED"] = "0"
 import main as bot
 bot.init_db()
 

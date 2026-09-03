@@ -9,6 +9,8 @@ try:
 except FileNotFoundError:
     pass
 
+import os
+os.environ["SPAM_ENABLED"] = "0"
 import main as bot
 
 bot.init_db()
