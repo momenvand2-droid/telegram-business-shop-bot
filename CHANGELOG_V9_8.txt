@@ -1,6 +1,0 @@
-V9.8 Receipt Lock
-- Removed the previous lock based on a customer having received an older card.
-- Before a receipt is received, customers always receive the currently configured card details, even after the admin changes the card.
-- After a receipt photo is received, that customer's payment details are permanently locked and no card number is sent again.
-- Receipt lock persists in SQLite because it is derived from stored order status.
-- Existing V9.6 voice guard and V9.5 anti-spam behavior preserved.
