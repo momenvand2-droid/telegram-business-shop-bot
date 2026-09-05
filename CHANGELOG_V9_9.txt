@@ -9,3 +9,6 @@ V9.9 Delayed Natural Flow
 - Orders store no product name; checkout continues with size and recipient details.
 - Price questions point to the page; missing-price follow-up asks for a careful check.
 - Added persistent Telegram update deduplication.
+- Strict checkout mode: the general sales-answer engine is bypassed.
+- Unrelated questions receive only the fixed registration-bot boundary reply.
+- The unfinished form prompt is never appended to an unrelated-question reply.

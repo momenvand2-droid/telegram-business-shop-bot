@@ -31,6 +31,10 @@ FIRST_CUSTOMER_REPLY = "سلام، بله چه محصولی می‌خوایید�
 SECOND_CUSTOMER_REPLY = "بله موجوده ✅"
 PRICE_PAGE_REPLY = "قیمت داخل پیج گذاشته شده 🌹"
 PRICE_MISSING_REPLY = "با دقت چک کنید 🌹"
+EXTRA_QUESTION_REPLY = (
+    "من فقط ربات ثبت سفارشم و نمی‌تونم به این سؤال پاسخ بدم. "
+    "لطفاً خودتون محصول رو داخل پیج چک کنید؛ داخل بخش توضیحات محصول کامل نوشته شده 🌹"
+)
 
 # The polling loop is single-threaded. This context lets send_business enforce
 # one automatic reply per incoming customer message without changing hundreds
@@ -1080,7 +1084,7 @@ def update_chat(chat_id, **kwargs):
     conn.commit()
     conn.close()
 
-def anti_spam_check(connection_id, chat_id):
+def anti_spam_check(connection_id, chat_id, silent=False):
     """Return True when this incoming customer message must be consumed by anti-spam.
 
     A burst of SPAM_MESSAGE_LIMIT messages within SPAM_WINDOW_SECONDS earns one
@@ -1119,11 +1123,12 @@ def anti_spam_check(connection_id, chat_id):
             spam_warnings=warnings,
             spam_blocked=1,
         )
-        send_business(
-            connection_id,
-            chat_id,
-            "⛔️ تعداد پیام‌هات خیلی بالاست. این سومین هشدار اسپم بود و پاسخ خودکار این گفتگو مسدود شد.",
-        )
+        if not silent:
+            send_business(
+                connection_id,
+                chat_id,
+                "⛔️ تعداد پیام‌هات خیلی بالاست. این سومین هشدار اسپم بود و پاسخ خودکار این گفتگو مسدود شد.",
+            )
         if ADMIN_ID:
             send_admin(
                 f"⛔️ مشتری {chat_id} بعد از {warnings} هشدار اسپم مسدود شد.\n"
@@ -1137,11 +1142,12 @@ def anti_spam_check(connection_id, chat_id):
         spam_message_count=0,
         spam_warnings=warnings,
     )
-    send_business(
-        connection_id,
-        chat_id,
-        f"⚠️ تعداد پیام‌هات خیلی بالاست. لطفاً پیام‌ها رو پشت‌سرهم نفرست. هشدار اسپم {warnings} از {SPAM_MAX_WARNINGS}.",
-    )
+    if not silent:
+        send_business(
+            connection_id,
+            chat_id,
+            f"⚠️ تعداد پیام‌هات خیلی بالاست. لطفاً پیام‌ها رو پشت‌سرهم نفرست. هشدار اسپم {warnings} از {SPAM_MAX_WARNINGS}.",
+        )
     return True
 
 def reset_spam_status(chat_id):
@@ -1216,7 +1222,7 @@ def claim_customer_message(connection_id, chat_id, message_id):
         conn.close()
 
 
-def send_business(connection_id, chat_id, text, source_message_id=None):
+def send_business(connection_id, chat_id, text, source_message_id=None, allow_repeat=False):
     """Send at most one reply per incoming message and never repeat exact text."""
     global _ACTIVE_CUSTOMER_MESSAGE_ID
     source_id = source_message_id or _ACTIVE_CUSTOMER_MESSAGE_ID
@@ -1237,7 +1243,7 @@ def send_business(connection_id, chat_id, text, source_message_id=None):
             (int(chat_id), reply_hash),
         ).fetchone()
         conn.close()
-        if already_for_message or repeated_text:
+        if already_for_message or (repeated_text and not allow_repeat):
             return None
 
     result = api("sendMessage", {
@@ -2179,6 +2185,206 @@ def handle_admin_message(msg):
 # Customer conversation
 # ------------------------------------------------------------
 
+def strict_valid_name(text):
+    """Accept a likely recipient name, never a shop question as the name field."""
+    n = normalize_text(text)
+    if looks_like_question(text) or re.search(r"\d", n):
+        return False
+    blocked = {
+        "رنگ", "قیمت", "موجود", "جنس", "ارسال", "محصول", "لباس", "سایز",
+        "داره", "دارین", "دارید", "چنده", "کجاست", "چرا", "چطور",
+    }
+    if any(word in n for word in blocked):
+        return False
+    return valid_name(text)
+
+
+def is_unrelated_question(text):
+    """Detect any customer question that is not the expected order-form value."""
+    if not (text or "").strip():
+        return False
+    return bool(
+        looks_like_question(text)
+        or detect_intent(text)
+        or detect_core_intents(text)
+        or detect_categories(text, limit=1)
+    )
+
+
+def send_extra_question_reply(connection_id, chat_id):
+    # Repeating this fixed boundary on a genuinely new unrelated question is
+    # intentional; one incoming message still receives at most one reply.
+    return send_business(
+        connection_id, chat_id, EXTRA_QUESTION_REPLY, allow_repeat=True
+    )
+
+
+def receive_simple_receipt(connection_id, chat_id, msg):
+    order = latest_waiting_order(chat_id)
+    if not order:
+        return
+    file_id = msg["photo"][-1]["file_id"]
+    conn = db()
+    conn.execute(
+        "UPDATE orders SET receipt_file_id=?,status='receipt_sent' WHERE id=?",
+        (file_id, order["id"]),
+    )
+    conn.commit()
+    conn.close()
+    update_chat(chat_id, state="", pending_size="", cancel_return_state="", edit_return_state="")
+    send_business(
+        connection_id, chat_id,
+        f"رسید سفارش #{order['id']} دریافت شد ✅ برای بررسی فروشگاه فرستادم."
+    )
+    caption = (
+        f"📸 رسید سفارش #{order['id']}\n\n"
+        f"سایز: {order['size']}\nنام: {order['full_name']}\n"
+        f"موبایل: {order['phone']}\nآدرس: {order['address']}\n"
+        f"Chat ID: {chat_id}"
+    )
+    send_admin_photo(file_id, caption)
+
+
+def handle_strict_order_flow(connection_id, chat_id, msg, state, text):
+    """Only register the order; never invoke the general sales-answer engine."""
+    c = get_chat(chat_id)
+
+    if msg.get("photo"):
+        if state == "await_receipt":
+            receive_simple_receipt(connection_id, chat_id, msg)
+            return
+        update_chat(chat_id, pending_product_photo=msg["photo"][-1]["file_id"])
+        if state == "await_size_simple":
+            send_business(connection_id, chat_id, "عکس ثبت شد ✅ لطفاً سایزت رو بفرست.")
+        return
+
+    if not text:
+        return
+
+    ntext = normalize_text(text)
+    c = get_chat(chat_id)
+    if int(c["price_page_told"] or 0) and is_price_missing_followup(text):
+        send_business(connection_id, chat_id, PRICE_MISSING_REPLY)
+        return
+    direct_price_question = bool(
+        re.search(r"(?:قیمت|قيمت|قیمط|چنده|چند تومن|چقدر)", ntext)
+    )
+    if direct_price_question:
+        update_chat(chat_id, price_page_told=1)
+        send_business(connection_id, chat_id, PRICE_PAGE_REPLY)
+        return
+
+    if state == "opening_wait":
+        return
+
+    if state in {"await_size_simple", "await_height_weight"}:
+        h, w = extract_height_weight(text)
+        if h and w:
+            _, rec = size_answer(text)
+            if rec:
+                update_chat(chat_id, size=rec, state="await_name", pending_size="")
+                send_business(connection_id, chat_id, f"سایز {rec} ثبت شد ✅ اسم و فامیلی تحویل‌گیرنده رو بفرست.")
+            return
+        chosen = extract_explicit_size(text)
+        if chosen:
+            update_chat(chat_id, size=chosen, state="await_name", pending_size="")
+            send_business(connection_id, chat_id, f"سایز {chosen} ثبت شد ✅ اسم و فامیلی تحویل‌گیرنده رو بفرست.")
+            return
+        if is_unrelated_question(text):
+            send_extra_question_reply(connection_id, chat_id)
+        return
+
+    if state == "await_name":
+        if strict_valid_name(text):
+            update_chat(chat_id, full_name=text.strip(), state="await_phone")
+            send_business(connection_id, chat_id, "شماره موبایل گیرنده رو بفرست.")
+        elif is_unrelated_question(text):
+            send_extra_question_reply(connection_id, chat_id)
+        return
+
+    if state == "await_phone":
+        phone = extract_phone(text)
+        if phone:
+            update_chat(chat_id, phone=phone, state="await_address")
+            send_business(connection_id, chat_id, "آدرس کامل گیرنده رو بفرست.")
+        elif is_unrelated_question(text):
+            send_extra_question_reply(connection_id, chat_id)
+        return
+
+    if state in {"await_address", "edit_address"}:
+        if valid_address(text) and not looks_like_question(text):
+            update_chat(chat_id, address=text.strip(), state="confirm_order_simple")
+            send_business(connection_id, chat_id, simple_order_review_text(chat_id))
+        elif is_unrelated_question(text):
+            send_extra_question_reply(connection_id, chat_id)
+        return
+
+    if state == "confirm_order_simple":
+        if is_affirmative_choice(text):
+            order_id = create_simple_order(chat_id)
+            update_chat(chat_id, state="await_receipt", last_price=0)
+            c = get_chat(chat_id)
+            send_business(connection_id, chat_id, f"سفارش #{order_id} ثبت شد ✅\n\n" + payment_text_for_chat(chat_id))
+            send_admin(
+                f"🆕 سفارش #{order_id}\n\nسایز: {c['size']}\nنام: {c['full_name']}\n"
+                f"موبایل: {c['phone']}\nآدرس: {c['address']}\nChat ID: {chat_id}\n\n/pause {chat_id}"
+            )
+            if c["pending_product_photo"]:
+                send_admin_photo(c["pending_product_photo"], f"🖼 عکس محصول سفارش #{order_id}")
+        elif is_negative_choice(text) or is_edit_request(text):
+            update_chat(chat_id, state="edit_menu")
+            send_business(connection_id, chat_id, "کدام مورد اصلاح شود؟ سایز، نام، موبایل یا آدرس؟")
+        elif is_unrelated_question(text):
+            send_extra_question_reply(connection_id, chat_id)
+        return
+
+    if state == "edit_menu":
+        if "سایز" in ntext:
+            update_chat(chat_id, state="await_size_simple", size="")
+            send_business(connection_id, chat_id, "سایز درست رو بفرست.")
+        elif "نام" in ntext or "اسم" in ntext:
+            update_chat(chat_id, state="edit_name")
+            send_business(connection_id, chat_id, "اسم و فامیلی درست رو بفرست.")
+        elif any(x in ntext for x in ["موبایل", "شماره", "تلفن"]):
+            update_chat(chat_id, state="edit_phone")
+            send_business(connection_id, chat_id, "شماره موبایل درست رو بفرست.")
+        elif "آدرس" in ntext or "ادرس" in ntext:
+            update_chat(chat_id, state="edit_address")
+            send_business(connection_id, chat_id, "آدرس کامل درست رو بفرست.")
+        elif is_unrelated_question(text):
+            send_extra_question_reply(connection_id, chat_id)
+        return
+
+    if state == "edit_name":
+        if strict_valid_name(text):
+            update_chat(chat_id, full_name=text.strip(), state="confirm_order_simple")
+            send_business(connection_id, chat_id, simple_order_review_text(chat_id))
+        elif is_unrelated_question(text):
+            send_extra_question_reply(connection_id, chat_id)
+        return
+
+    if state == "edit_phone":
+        phone = extract_phone(text)
+        if phone:
+            update_chat(chat_id, phone=phone, state="confirm_order_simple")
+            send_business(connection_id, chat_id, simple_order_review_text(chat_id))
+        elif is_unrelated_question(text):
+            send_extra_question_reply(connection_id, chat_id)
+        return
+
+    if state == "await_receipt":
+        if is_unrelated_question(text):
+            send_extra_question_reply(connection_id, chat_id)
+        return
+
+    if not state and (detect_intent(text) == "order" or looks_like_product_reference(text)):
+        start_order(chat_id)
+        send_business(connection_id, chat_id, "لطفاً سایزت رو بفرست.")
+        return
+
+    if is_unrelated_question(text):
+        send_extra_question_reply(connection_id, chat_id)
+
 def handle_business_message(msg, business_owner_id=0):
     global _ACTIVE_CUSTOMER_MESSAGE_ID
     connection_id = msg.get("business_connection_id")
@@ -2226,13 +2432,12 @@ def handle_business_message(msg, business_owner_id=0):
     # Voice messages are not processed as customer intent and do not count
     # toward the anti-spam burst counter.
     if msg.get("voice"):
-        send_business(connection_id, chat_id, "لطفاً پیامتون رو تایپ کنید 🌹")
         return
 
     # Count every incoming customer message (text, photo, caption, etc.) before
     # normal sales logic. When a burst reaches the threshold this message is
     # consumed by the anti-spam warning instead of producing another bot reply.
-    if anti_spam_check(connection_id, chat_id):
+    if anti_spam_check(connection_id, chat_id, silent=True):
         return
 
     c = get_chat(chat_id)
@@ -2245,6 +2450,12 @@ def handle_business_message(msg, business_owner_id=0):
         c = get_chat(chat_id)
         state = "await_size_simple"
     text = (msg.get("text") or msg.get("caption") or "").strip()
+
+    # Strict mode: only the fixed checkout flow, the price rule, and the single
+    # standard boundary reply are allowed. The broad 100k-answer engine below
+    # is deliberately bypassed for customer chats.
+    handle_strict_order_flow(connection_id, chat_id, msg, state, text)
+    return
 
     # ----------------------- Photos -----------------------
     if msg.get("photo"):
