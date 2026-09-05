@@ -1,0 +1,7 @@
+V9.7 Card Lock
+- Remembers the first card number ever sent to each customer chat.
+- If the admin later changes the card, that customer never receives the new card.
+- Repeated card requests after a card change return a lock notice instead.
+- Customers who have never received a card get the current card normally.
+- If the current card is unchanged, repeat requests may receive the same card again.
+- Works even if old card messages were later deleted with /deletecards because the history row remains stored.
