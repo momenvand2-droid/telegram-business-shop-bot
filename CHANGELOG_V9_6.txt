@@ -1,4 +1,0 @@
-V9.6 Voice Guard
-- Voice messages receive: لطفاً پیامتون رو تایپ کنید 🌹
-- Voice bypasses normal intent/order processing.
-- Voice does not increment the anti-spam counter.
